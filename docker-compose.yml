@@ -1,0 +1,98 @@
+version: '3.8'
+
+# ============================================================
+#  HỆ THỐNG CSDL PHÂN TÁN - Quản lý Chi nhánh
+#  SQL Server + Flask + Redis
+# ============================================================
+
+services:
+
+  # ─── SQL SERVER ───
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "MyPass@2025"
+      MSSQL_PID: Developer
+    ports:
+      - "${MSSQL_PORT:-1433}:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+      - ./init/mssql:/docker-entrypoint-initdb.d
+    networks:
+      - db-cluster
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "MyPass@2025" -C -Q "SELECT 1" -b
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ─── CHẠY SCRIPT KHỞI TẠO DB ───
+  mssql-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-init
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    volumes:
+      - ./init/mssql:/scripts
+    networks:
+      - db-cluster
+    entrypoint: >
+      bash -c "
+        echo 'Đang khởi tạo database...' &&
+        /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P 'MyPass@2025' -C -i /scripts/01-schema-and-data.sql &&
+        echo '✅ Database đã sẵn sàng!'
+      "
+
+  # ─── REDIS (cache) ───
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - db-cluster
+
+  # ─── FLASK WEB APP ───
+  flask-app:
+    build:
+      context: ./flask-app
+      dockerfile: Dockerfile
+    container_name: flask-app
+    restart: unless-stopped
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "1"
+      DB_HOST: sqlserver
+      DB_PORT: 1433
+      DB_USER: sa
+      DB_PASSWORD: "MyPass@2025"
+      DB_NAME: quan_ly_chi_nhanh
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "${FLASK_PORT:-5000}:5000"
+    volumes:
+      - ./flask-app:/app
+    depends_on:
+      mssql-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    networks:
+      - db-cluster
+
+volumes:
+  mssql-data:
+  redis-data:
+
+networks:
+  db-cluster:
+    driver: bridge

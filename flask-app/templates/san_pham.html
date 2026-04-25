@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Sản phẩm{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Danh sách sản phẩm</h1>
+    <a href="/san-pham/them" class="btn btn-primary">+ Thêm sản phẩm</a>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Mã SP</th>
+            <th>Tên sản phẩm</th>
+            <th>Loại</th>
+            <th>NCC</th>
+            <th>Giá</th>
+            <th>Lợi nhuận</th>
+            <th>Giảm giá</th>
+            <th>Trạng thái</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in products %}
+        <tr>
+            <td>{{ p.ma_sp }}</td>
+            <td>{{ p.ten_sp }}</td>
+            <td>{{ p.ten_loai_sp }}</td>
+            <td>{{ p.ten_NCC }}</td>
+            <td class="text-right">{{ "{:,.0f}".format(p.gia) }}đ</td>
+            <td class="text-right">{{ p.ti_le_loi_nhuan }}%</td>
+            <td class="text-right">{{ p.ti_le_giam_gia }}%</td>
+            <td>
+                {% if p.trang_thai == 1 %}
+                    <span class="badge badge-active">Đang bán</span>
+                {% else %}
+                    <span class="badge badge-inactive">Ngừng bán</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

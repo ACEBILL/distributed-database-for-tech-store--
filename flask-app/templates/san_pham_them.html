@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Thêm sản phẩm{% endblock %}
+{% block content %}
+<h1>Thêm sản phẩm mới</h1>
+
+<form method="POST" class="form">
+    <div class="form-group">
+        <label>Mã sản phẩm</label>
+        <input type="text" name="ma_sp" placeholder="VD: SP026" required>
+    </div>
+
+    <div class="form-group">
+        <label>Tên sản phẩm</label>
+        <input type="text" name="ten_sp" placeholder="VD: Laptop Asus Vivobook" required>
+    </div>
+
+    <div class="form-group">
+        <label>Giá (VNĐ)</label>
+        <input type="number" name="gia" placeholder="VD: 15000000" required>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Tỉ lệ lợi nhuận (%)</label>
+            <input type="number" name="ti_le_loi_nhuan" value="10" step="0.01">
+        </div>
+        <div class="form-group">
+            <label>Tỉ lệ giảm giá (%)</label>
+            <input type="number" name="ti_le_giam_gia" value="0" step="0.01">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Loại sản phẩm</label>
+        <select name="ma_loai_sp" required>
+            <option value="">-- Chọn loại --</option>
+            {% for l in loai_sp %}
+                <option value="{{ l.ma_loai_sp }}">{{ l.ten_loai_sp }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Nhà cung cấp</label>
+        <select name="ma_ncc" required>
+            <option value="">-- Chọn NCC --</option>
+            {% for n in ncc_list %}
+                <option value="{{ n.ma_NCC }}">{{ n.ten_NCC }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Mô tả</label>
+        <textarea name="mo_ta" rows="3" placeholder="Mô tả sản phẩm..."></textarea>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Lưu sản phẩm</button>
+        <a href="/san-pham" class="btn">Hủy</a>
+    </div>
+</form>
+{% endblock %}

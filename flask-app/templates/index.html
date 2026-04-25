@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Trang chủ - Quản lý Chi nhánh{% endblock %}
+{% block content %}
+<h1>Tổng quan hệ thống</h1>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ total_sp }}</div>
+        <div class="stat-label">Sản phẩm</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ total_nv }}</div>
+        <div class="stat-label">Nhân viên</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ total_cn }}</div>
+        <div class="stat-label">Chi nhánh</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ total_ncc }}</div>
+        <div class="stat-label">Nhà cung cấp</div>
+    </div>
+</div>
+
+<h2>API có sẵn</h2>
+<table>
+    <thead>
+        <tr><th>Endpoint</th><th>Mô tả</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><a href="/api/san-pham">/api/san-pham</a></td><td>Danh sách sản phẩm (JSON, có cache Redis)</td></tr>
+        <tr><td><a href="/api/thong-ke">/api/thong-ke</a></td><td>Thống kê theo chi nhánh (JSON)</td></tr>
+    </tbody>
+</table>
+{% endblock %}
