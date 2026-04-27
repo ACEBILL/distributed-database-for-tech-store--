@@ -1,114 +1,134 @@
-# Dự án CSDL Phân Tán - Quản lý Chi nhánh
+# Dự án CSDL phân tán - Backend API quản lý chi nhánh
+
+Project dùng Flask API, SQL Server và Redis. Backend hiện chỉ trả JSON cho API client, không còn render HTML template.
 
 ## Yêu cầu
 
-- **Docker Desktop** đã cài và đang chạy
-- **Git** để clone repo
+- Docker Desktop đang chạy
+- Git
 
----
+## Setup
 
-## Setup (3 bước)
+Windows CMD:
+
+```cmd
+copy .env.example .env
+docker compose up -d --build
+```
+
+PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d --build
+```
+
+Linux/macOS/Git Bash:
 
 ```bash
-git clone <url-repo>
 cp .env.example .env
 docker compose up -d --build
 ```
 
-Lần đầu mất ~2-3 phút (tải SQL Server image + build Flask). Các lần sau vài giây.
-
----
-
 ## Truy cập
 
-| Service        | URL / Host           | Ghi chú                            |
-|----------------|----------------------|------------------------------------|
-| **Flask Web**  | http://localhost:5000| Giao diện chính                    |
-| SQL Server     | localhost:1433       | user: sa / pass: YourStr0ng!Pass   |
-| Redis          | localhost:6379       |                                    |
+| Service | URL / Host | Ghi chú |
+|---|---|---|
+| Frontend | http://localhost:3000 | Giao diện client |
+| Backend API | http://localhost:5000 | Flask API |
+| SQL Server | localhost,1433 | `sa` / `MyPass@2025` mặc định |
+| Redis | localhost:6379 | Cache |
 
-### API endpoints
+## API endpoints
 
-| Endpoint        | Mô tả                              |
-|-----------------|-------------------------------------|
-| `/api/san-pham` | JSON danh sách sản phẩm (có cache) |
-| `/api/thong-ke` | JSON thống kê chi nhánh            |
-
-### Kết nối SQL Server bằng SSMS / Azure Data Studio
-
-```
-Server:   localhost,1433
-Login:    sa
-Password: YourStr0ng!Pass
-Database: quan_ly_chi_nhanh
-```
-
-### Kết nối qua terminal
-
-```bash
-docker compose exec sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "YourStr0ng!Pass" -C -d quan_ly_chi_nhanh
-```
-
----
+| Endpoint | Mô tả |
+|---|---|
+| `GET /api/san-pham` | Danh sách sản phẩm đang bán, có cache Redis |
+| `GET /api/nhan-vien` | Danh sách nhân viên |
+| `GET /api/thong-ke` | Danh sách chi nhánh và trạng thái cấu hình DB chi nhánh |
 
 ## Cấu trúc project
 
-```
+```text
 ├── docker-compose.yml
 ├── .env.example
 ├── init/mssql/
-│   └── 01-schema-and-data.sql    ← Schema + dummy data (T-SQL)
-└── flask-app/
-    ├── Dockerfile                ← Có cài ODBC driver
-    ├── requirements.txt          ← pyodbc thay pymysql
-    ├── app.py                    ← Routes chính
-    ├── db.py                     ← Kết nối SQL Server + Redis
-    ├── templates/                ← Giao diện HTML
-    └── static/css/style.css
+│   └── 01-schema-and-data.sql
+└── backend/
+    ├── Dockerfile
+    ├── requirements.txt
+    ├── app.py
+    ├── config.py
+    ├── db.py
+    ├── api/
+    │   ├── employee_api.py
+    │   ├── product_api.py
+    │   └── stats_api.py
+    ├── services/
+    │   ├── branch_service.py
+    │   ├── cache_service.py
+    │   ├── employee_service.py
+    │   └── product_service.py
+    └── middleware/
+        └── error_handler.py
+└── frontend/
+    ├── Dockerfile
+    ├── nginx.conf
+    ├── templates/
+    │   └── index.html
+    └── static/
+        ├── css/style.css
+        └── js/app.js
 ```
 
----
+## Cấu hình DB chi nhánh
 
-## Dữ liệu dummy có sẵn
+DB trung tâm chỉ lưu mã và tên chi nhánh. Thông tin kết nối DB chi nhánh để trong `.env`.
 
-| Bảng         | Số bản ghi | Mô tả                      |
-|--------------|-----------|------------------------------|
-| chi_nhanh    | 5         | HN, HCM, ĐN, CT, HP        |
-| loai_sp      | 10        | Laptop, Phone, Phụ kiện...  |
-| NCC          | 8         | Apple, Samsung, Dell...     |
-| SAN_PHAM     | 25        | Sản phẩm tech có giá VNĐ   |
-| phong_ban    | 6         | BGĐ, KD, KT, Kho, NS, KT  |
-| NHAN_VIEN    | 20        | Đủ chức vụ, 1 NV đã nghỉ   |
+```env
+BRANCH_CN01_DB_HOST=
+BRANCH_CN01_DB_ENGINE=sqlserver
+BRANCH_CN01_DB_PORT=1433
+BRANCH_CN01_DB_NAME=
+BRANCH_CN01_DB_USER=
+BRANCH_CN01_DB_PASSWORD=
 
----
+BRANCH_CN02_DB_HOST=
+BRANCH_CN02_DB_ENGINE=sqlserver
+BRANCH_CN02_DB_PORT=1433
+BRANCH_CN02_DB_NAME=
+BRANCH_CN02_DB_USER=
+BRANCH_CN02_DB_PASSWORD=
+```
+
+`BRANCH_CNxx_DB_ENGINE` dùng để frontend/API biết chi nhánh đó dùng hệ CSDL nào. Giá trị dự kiến:
+
+```text
+sqlserver
+postgresql
+mysql
+```
+
+Hiện backend mới có driver kết nối SQL Server. Nếu một chi nhánh dùng PostgreSQL hoặc MySQL, cần cài thêm driver Python và viết thêm hàm kết nối tương ứng trước khi query dữ liệu thật.
+
+Nếu chưa cấu hình DB chi nhánh, `/api/thong-ke` vẫn trả tên chi nhánh nhưng `trang_thai_ket_noi` là `not_configured`.
 
 ## Lệnh thường dùng
 
 ```bash
-docker compose up -d --build      # Bật (build lại Flask nếu sửa Dockerfile)
-docker compose up -d              # Bật nhanh
-docker compose down               # Tắt (giữ data)
-docker compose down -v            # Tắt + xóa data (reset hoàn toàn)
-docker compose logs -f flask-app  # Xem log Flask
-docker compose logs -f sqlserver  # Xem log SQL Server
+docker compose up -d --build
+docker compose up -d
+docker compose down
+docker compose down -v
+docker compose ps
+docker compose logs -f frontend
+docker compose logs -f backend
+docker compose logs -f sqlserver
 ```
 
-**Hot reload:** Flask bật debug mode + volume mount → sửa code Python tự restart.
+Reset database hoàn toàn:
 
----
-
-## Lưu ý SQL Server
-
-- SQL Server bắt buộc phải có password mạnh (chữ hoa + chữ thường + số + ký tự đặc biệt, ≥8 ký tự). Không thể bỏ password như MySQL.
-- Image SQL Server khá nặng (~1.5GB lần tải đầu), nhưng chỉ tải 1 lần.
-- Dùng NVARCHAR thay VARCHAR để hỗ trợ tiếng Việt đầy đủ.
-
----
-
-## Xử lý lỗi
-
-**Port bị trùng:** Sửa `.env`, đổi port, chạy lại `docker compose up -d`
-
-**Reset toàn bộ:** `docker compose down -v` rồi `docker compose up -d --build`
-
-**Flask lỗi kết nối:** SQL Server cần ~30s để sẵn sàng. `docker compose restart flask-app`
+```bash
+docker compose down -v
+docker compose up -d --build
+```

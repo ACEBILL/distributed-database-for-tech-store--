@@ -97,10 +97,7 @@ GO
 -- Chi nhánh
 INSERT INTO chi_nhanh VALUES
 (N'CN01', N'Chi nhánh Hà Nội'),
-(N'CN02', N'Chi nhánh TP.HCM'),
-(N'CN03', N'Chi nhánh Đà Nẵng'),
-(N'CN04', N'Chi nhánh Cần Thơ'),
-(N'CN05', N'Chi nhánh Hải Phòng');
+(N'CN02', N'Chi nhánh TP.HCM');
 
 -- Loại sản phẩm
 INSERT INTO loai_sp VALUES
@@ -108,12 +105,12 @@ INSERT INTO loai_sp VALUES
 (N'LSP02', N'Điện thoại',        N'CN01'),
 (N'LSP03', N'Phụ kiện',          N'CN02'),
 (N'LSP04', N'Màn hình',          N'CN02'),
-(N'LSP05', N'Linh kiện PC',      N'CN03'),
-(N'LSP06', N'Thiết bị mạng',     N'CN03'),
-(N'LSP07', N'Máy tính bảng',     N'CN04'),
-(N'LSP08', N'Thiết bị âm thanh', N'CN04'),
-(N'LSP09', N'Camera & Webcam',   N'CN05'),
-(N'LSP10', N'Thiết bị đeo',      N'CN05');
+(N'LSP05', N'Linh kiện PC',      N'CN01'),
+(N'LSP06', N'Thiết bị mạng',     N'CN01'),
+(N'LSP07', N'Máy tính bảng',     N'CN02'),
+(N'LSP08', N'Thiết bị âm thanh', N'CN02'),
+(N'LSP09', N'Camera & Webcam',   N'CN01'),
+(N'LSP10', N'Thiết bị đeo',      N'CN02');
 
 -- Nhà cung cấp
 SET IDENTITY_INSERT NCC ON;
