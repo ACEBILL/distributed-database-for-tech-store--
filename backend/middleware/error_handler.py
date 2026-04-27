@@ -1,3 +1,4 @@
+import pyodbc
 from flask import jsonify, request
 
 
@@ -6,6 +7,13 @@ def register_error_handlers(app):
     def handle_value_error(error):
         if request.path.startswith("/api/"):
             return jsonify({"error": str(error)}), 400
+
+        return str(error), 400
+
+    @app.errorhandler(pyodbc.IntegrityError)
+    def handle_integrity_error(error):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Database integrity error", "detail": str(error)}), 400
 
         return str(error), 400
 

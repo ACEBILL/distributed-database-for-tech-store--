@@ -7,3 +7,7 @@ def get_cache(key):
 
 def set_cache(key, value, ttl=300):
     get_redis_connection().setex(key, ttl, value)
+
+
+def delete_cache(key):
+    get_redis_connection().delete(key)

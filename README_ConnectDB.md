@@ -38,4 +38,5 @@ docker compose exec sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -
 - Loại hệ CSDL của từng chi nhánh nằm trong `BRANCH_CNxx_DB_ENGINE`, ví dụ `sqlserver`, `postgresql`, `mysql`.
 - Backend hiện mới có driver kết nối SQL Server; PostgreSQL/MySQL cần thêm driver và code kết nối riêng.
 - Backend API chạy ở `http://localhost:5000`.
+- Swagger UI chạy ở `http://localhost:5000/apidocs`.
 - Frontend chạy ở `http://localhost:3000`.

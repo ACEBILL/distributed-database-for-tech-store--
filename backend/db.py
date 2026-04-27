@@ -33,6 +33,30 @@ def query_db(sql, params=None, fetchone=False):
         conn.close()
 
 
+def execute_db(sql, params=None):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, params or [])
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
+
+def execute_db_fetchone(sql, params=None):
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, params or [])
+        columns = [col[0] for col in cursor.description] if cursor.description else []
+        row = cursor.fetchone()
+        conn.commit()
+        return dict(zip(columns, row)) if row else None
+    finally:
+        conn.close()
+
+
 def get_branch_db_settings(branch_code):
     normalized_code = branch_code.upper().replace("-", "_")
     prefix = f"BRANCH_{normalized_code}_DB_"
