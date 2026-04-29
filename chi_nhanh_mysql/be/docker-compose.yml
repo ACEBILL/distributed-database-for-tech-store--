@@ -1,0 +1,20 @@
+
+
+services:
+  db:
+    image: mysql:8.4
+    container_name: mysql-container
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: TechStoreDB
+    ports:
+      - "3306:3306"
+    volumes:
+      # Ánh xạ thư mục init vào nơi MySQL tự động chạy script
+      - ./db/init:/docker-entrypoint-initdb.d
+      # (Tùy chọn) Lưu dữ liệu lâu dài để không bị mất khi xóa container
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
