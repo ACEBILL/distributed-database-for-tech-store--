@@ -82,11 +82,16 @@ CREATE TABLE NHAN_VIEN (
 GO
 
 -- Index
-CREATE NONCLUSTERED INDEX idx_sp_loai ON SAN_PHAM(ma_loai_sp);
-CREATE NONCLUSTERED INDEX idx_sp_ncc ON SAN_PHAM(ma_ncc);
-CREATE NONCLUSTERED INDEX idx_sp_trangthai ON SAN_PHAM(trang_thai);
-CREATE NONCLUSTERED INDEX idx_nv_pb ON NHAN_VIEN(ma_phong_ban);
-CREATE NONCLUSTERED INDEX idx_nv_chucvu ON NHAN_VIEN(chuc_vu);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_sp_loai' AND object_id = OBJECT_ID('dbo.SAN_PHAM'))
+    CREATE NONCLUSTERED INDEX idx_sp_loai ON SAN_PHAM(ma_loai_sp);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_sp_ncc' AND object_id = OBJECT_ID('dbo.SAN_PHAM'))
+    CREATE NONCLUSTERED INDEX idx_sp_ncc ON SAN_PHAM(ma_ncc);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_sp_trangthai' AND object_id = OBJECT_ID('dbo.SAN_PHAM'))
+    CREATE NONCLUSTERED INDEX idx_sp_trangthai ON SAN_PHAM(trang_thai);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_nv_pb' AND object_id = OBJECT_ID('dbo.NHAN_VIEN'))
+    CREATE NONCLUSTERED INDEX idx_nv_pb ON NHAN_VIEN(ma_phong_ban);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_nv_chucvu' AND object_id = OBJECT_ID('dbo.NHAN_VIEN'))
+    CREATE NONCLUSTERED INDEX idx_nv_chucvu ON NHAN_VIEN(chuc_vu);
 GO
 
 
@@ -95,6 +100,8 @@ GO
 -- ─────────────────────────────────────
 
 -- Chi nhánh
+IF NOT EXISTS (SELECT 1 FROM chi_nhanh WHERE ma_chi_nhanh = N'CN01')
+BEGIN
 INSERT INTO chi_nhanh VALUES
 (N'CN01', N'Chi nhánh Hà Nội'),
 (N'CN02', N'Chi nhánh TP.HCM');
@@ -193,6 +200,7 @@ UPDATE phong_ban SET ma_nv = 7  WHERE ma_pb = 3;
 UPDATE phong_ban SET ma_nv = 11 WHERE ma_pb = 4;
 UPDATE phong_ban SET ma_nv = 14 WHERE ma_pb = 5;
 UPDATE phong_ban SET ma_nv = 17 WHERE ma_pb = 6;
+END
 GO
 
 

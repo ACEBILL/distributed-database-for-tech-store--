@@ -34,7 +34,7 @@ services:
     entrypoint: >
       bash -c "
         echo 'Initializing database...' &&
-        /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P '${DB_PASSWORD:-MyPass@2025}' -C -i /scripts/01-schema-and-data.sql &&
+        /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P '${DB_PASSWORD:-MyPass@2025}' -C -b -i /scripts/01-schema-and-data.sql &&
         echo 'Database is ready.'
       "
 
