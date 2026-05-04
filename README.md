@@ -169,6 +169,11 @@ Các route dưới đây là roadmap dựa trên schema trong `init/mssql/01-sch
 |---|---|---|
 | `GET` | `/api/thong-ke/chi-nhanh` | `*` Lấy dữ liệu từ view `v_thong_ke_chi_nhanh` |
 | `GET` | `/api/thong-ke/luong-phong-ban` | `*` Lấy dữ liệu từ view `v_luong_phong_ban` |
+| `GET` | `/api/thong-ke/san-pham-theo-chi-nhanh/<ma_chi_nhanh>` | Lấy dữ liệu từ `ma_chi_nhanh` |
+| `GET` | `/api/thong-ke/don-hang-theo-chi-nhanh/<ma_chi_nhanh>` | Lấy dữ liệu từ `ma_chi_nhanh` |
+| `GET` | `/api/thong-ke/nhan-vien-theo-chi-nhanh/<ma_chi_nhanh>` | Lấy dữ liệu từ `ma_chi_nhanh` |
+| `GET` | `/api/thong-ke/don-hang-theo-chi-nhanh/<ma_chi_nhanh>` | Lấy dữ liệu từ `ma_chi_nhanh` |
+
 
 ## Cấu trúc project
 
