@@ -1,6 +1,8 @@
 from flask import Blueprint, jsonify, request
 
+from middleware.auth import require_auth
 from services.branch_service import (
+    check_branch_health,
     create_branch,
     delete_branch,
     get_branch_by_id,
@@ -61,6 +63,7 @@ def api_chi_nhanh_detail(ma_chi_nhanh):
 
 
 @branch_api_bp.route("/chi-nhanh", methods=["POST"])
+@require_auth
 def api_create_chi_nhanh():
     """Tạo chi nhánh
     ---
@@ -91,6 +94,7 @@ def api_create_chi_nhanh():
 
 
 @branch_api_bp.route("/chi-nhanh/<ma_chi_nhanh>", methods=["PUT"])
+@require_auth
 def api_update_chi_nhanh(ma_chi_nhanh):
     """Cập nhật chi nhánh
     ---
@@ -122,6 +126,7 @@ def api_update_chi_nhanh(ma_chi_nhanh):
 
 
 @branch_api_bp.route("/chi-nhanh/<ma_chi_nhanh>", methods=["DELETE"])
+@require_auth
 def api_delete_chi_nhanh(ma_chi_nhanh):
     """Xóa chi nhánh
     ---
@@ -144,3 +149,40 @@ def api_delete_chi_nhanh(ma_chi_nhanh):
     if not deleted:
         return jsonify({"error": "Branch not found"}), 404
     return jsonify({"message": "Branch deleted", "ma_chi_nhanh": ma_chi_nhanh})
+
+
+@branch_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/health")
+def api_chi_nhanh_health(ma_chi_nhanh):
+    """Kiểm tra kết nối tới DB của chi nhánh
+    ---
+    tags:
+      - Chi nhánh
+    parameters:
+      - name: ma_chi_nhanh
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Trạng thái kết nối DB chi nhánh
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ma_chi_nhanh: {type: string}
+                ten_chi_nhanh: {type: string}
+                he_quan_tri_csdl: {type: string}
+                status:
+                  type: string
+                  description: ok / not_configured / unsupported_engine / unreachable
+                error:
+                  type: string
+                  nullable: true
+      404:
+        description: Không tìm thấy chi nhánh
+    """
+    result = check_branch_health(ma_chi_nhanh)
+    if not result:
+        return jsonify({"error": "Branch not found"}), 404
+    return jsonify(result)

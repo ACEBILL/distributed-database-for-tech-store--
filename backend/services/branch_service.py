@@ -4,6 +4,7 @@ from db import (
     get_branch_db_engine,
     has_branch_db_settings,
     parse_pagination,
+    query_branch_db,
     query_db,
 )
 
@@ -130,3 +131,36 @@ def get_branch_analysis_for_api():
             float(item["gia_trung_binh"]) if item["gia_trung_binh"] else 0
         )
     return stats
+
+
+def check_branch_health(ma_chi_nhanh):
+    branch = get_branch_by_id(ma_chi_nhanh)
+    if not branch:
+        return None
+
+    engine = get_branch_db_engine(ma_chi_nhanh)
+    result = {
+        "ma_chi_nhanh": branch["ma_chi_nhanh"],
+        "ten_chi_nhanh": branch["ten_chi_nhanh"],
+        "he_quan_tri_csdl": engine,
+        "status": "unknown",
+        "error": None,
+    }
+
+    if not has_branch_db_settings(ma_chi_nhanh):
+        result["status"] = "not_configured"
+        return result
+
+    if engine != "sqlserver":
+        result["status"] = "unsupported_engine"
+        result["error"] = f"Driver chưa hỗ trợ engine: {engine}"
+        return result
+
+    try:
+        query_branch_db(ma_chi_nhanh, "SELECT 1 AS ok", fetchone=True)
+        result["status"] = "ok"
+    except Exception as exc:
+        result["status"] = "unreachable"
+        result["error"] = str(exc)
+
+    return result

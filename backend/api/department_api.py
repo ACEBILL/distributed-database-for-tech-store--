@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from middleware.auth import require_auth
 from services.department_service import (
     create_department,
     delete_department,
@@ -62,6 +63,7 @@ def api_phong_ban_detail(ma_pb):
 
 
 @department_api_bp.route("/phong-ban", methods=["POST"])
+@require_auth
 def api_create_phong_ban():
     """
     Tạo phòng ban
@@ -92,6 +94,7 @@ def api_create_phong_ban():
 
 
 @department_api_bp.route("/phong-ban/<int:ma_pb>", methods=["PUT"])
+@require_auth
 def api_update_phong_ban(ma_pb):
     """
     Cập nhật phòng ban
@@ -128,6 +131,7 @@ def api_update_phong_ban(ma_pb):
 
 
 @department_api_bp.route("/phong-ban/<int:ma_pb>", methods=["DELETE"])
+@require_auth
 def api_delete_phong_ban(ma_pb):
     """
     Xóa phòng ban
