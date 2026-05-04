@@ -1,4 +1,11 @@
-from db import execute_db, get_branch_db_engine, has_branch_db_settings, query_db
+from db import (
+    build_pagination_meta,
+    execute_db,
+    get_branch_db_engine,
+    has_branch_db_settings,
+    parse_pagination,
+    query_db,
+)
 
 
 def get_branches():
@@ -7,6 +14,45 @@ def get_branches():
         FROM chi_nhanh
         ORDER BY ma_chi_nhanh
     """)
+
+
+def _build_branch_filters(args):
+    where = []
+    params = []
+
+    keyword = (args.get("keyword") or "").strip()
+    if keyword:
+        like = f"%{keyword}%"
+        where.append("(ma_chi_nhanh LIKE ? OR ten_chi_nhanh LIKE ?)")
+        params.extend([like, like])
+
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    return where_sql, params
+
+
+def get_branches_for_api(args=None):
+    args = args or {}
+    where_sql, where_params = _build_branch_filters(args)
+    page, limit, offset = parse_pagination(args)
+
+    total_row = query_db(
+        "SELECT COUNT(*) AS total FROM chi_nhanh" + where_sql,
+        tuple(where_params),
+        fetchone=True,
+    )
+    total = total_row["total"] if total_row else 0
+
+    branches = query_db(
+        "SELECT ma_chi_nhanh, ten_chi_nhanh FROM chi_nhanh"
+        + where_sql
+        + " ORDER BY ma_chi_nhanh OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+        tuple(where_params) + (offset, limit),
+    )
+
+    return {
+        "data": branches,
+        "pagination": build_pagination_meta(page, limit, total),
+    }
 
 
 def get_branch_by_id(ma_chi_nhanh):

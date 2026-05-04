@@ -1,12 +1,43 @@
-from db import execute_db, execute_db_fetchone, query_db
+from db import build_pagination_meta, execute_db, execute_db_fetchone, parse_pagination, query_db
 
 
-def get_all_suppliers_for_api():
-    return query_db("""
-        SELECT ma_NCC AS ma_ncc, ten_NCC AS ten_ncc
-        FROM NCC
-        ORDER BY ma_NCC
-    """)
+def _build_supplier_filters(args):
+    where = []
+    params = []
+
+    keyword = (args.get("keyword") or "").strip()
+    if keyword:
+        like = f"%{keyword}%"
+        where.append("ten_NCC LIKE ?")
+        params.append(like)
+
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    return where_sql, params
+
+
+def get_all_suppliers_for_api(args=None):
+    args = args or {}
+    where_sql, where_params = _build_supplier_filters(args)
+    page, limit, offset = parse_pagination(args)
+
+    total_row = query_db(
+        "SELECT COUNT(*) AS total FROM NCC" + where_sql,
+        tuple(where_params),
+        fetchone=True,
+    )
+    total = total_row["total"] if total_row else 0
+
+    suppliers = query_db(
+        "SELECT ma_NCC AS ma_ncc, ten_NCC AS ten_ncc FROM NCC"
+        + where_sql
+        + " ORDER BY ma_NCC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+        tuple(where_params) + (offset, limit),
+    )
+
+    return {
+        "data": suppliers,
+        "pagination": build_pagination_meta(page, limit, total),
+    }
 
 
 def get_supplier_by_id_for_api(ma_ncc):

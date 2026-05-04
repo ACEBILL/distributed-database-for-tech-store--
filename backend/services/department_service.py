@@ -1,17 +1,47 @@
-from db import execute_db, execute_db_fetchone, query_db
+from db import build_pagination_meta, execute_db, execute_db_fetchone, parse_pagination, query_db
 
 
-DEPARTMENT_SELECT_SQL = """
-    SELECT
-        ma_pb,
-        ten_pb,
-        ma_nv
-    FROM phong_ban
-"""
+DEPARTMENT_COLUMNS_SQL = "ma_pb, ten_pb, ma_nv"
+DEPARTMENT_SELECT_SQL = "SELECT " + DEPARTMENT_COLUMNS_SQL + " FROM phong_ban"
 
 
-def get_all_departments_for_api():
-    return query_db(DEPARTMENT_SELECT_SQL + " ORDER BY ma_pb")
+def _build_department_filters(args):
+    where = []
+    params = []
+
+    keyword = (args.get("keyword") or "").strip()
+    if keyword:
+        like = f"%{keyword}%"
+        where.append("ten_pb LIKE ?")
+        params.append(like)
+
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    return where_sql, params
+
+
+def get_all_departments_for_api(args=None):
+    args = args or {}
+    where_sql, where_params = _build_department_filters(args)
+    page, limit, offset = parse_pagination(args)
+
+    total_row = query_db(
+        "SELECT COUNT(*) AS total FROM phong_ban" + where_sql,
+        tuple(where_params),
+        fetchone=True,
+    )
+    total = total_row["total"] if total_row else 0
+
+    departments = query_db(
+        DEPARTMENT_SELECT_SQL
+        + where_sql
+        + " ORDER BY ma_pb OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+        tuple(where_params) + (offset, limit),
+    )
+
+    return {
+        "data": departments,
+        "pagination": build_pagination_meta(page, limit, total),
+    }
 
 
 def get_department_by_id_for_api(ma_pb):

@@ -81,9 +81,11 @@ function renderProducts(payload) {
     `).join("");
 }
 
-function renderEmployees(employees) {
-    setText("employeeCount", numberFormatter.format(employees.length));
-    setText("employeeStatus", `${employees.length} nhân viên`);
+function renderEmployees(payload) {
+    const employees = Array.isArray(payload) ? payload : (payload.data || []);
+    const total = payload && payload.pagination ? payload.pagination.total : employees.length;
+    setText("employeeCount", numberFormatter.format(total));
+    setText("employeeStatus", `${total} nhân viên`);
 
     if (!employees.length) {
         renderEmpty("employeeRows", 6, "Chưa có dữ liệu nhân viên.");

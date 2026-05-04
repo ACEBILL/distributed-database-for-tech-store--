@@ -1,12 +1,48 @@
-from db import execute_db, query_db
+from db import build_pagination_meta, execute_db, parse_pagination, query_db
 
 
-def get_all_categories_for_api():
-    return query_db("""
-        SELECT ma_loai_sp, ten_loai_sp, ma_chi_nhanh
-        FROM loai_sp
-        ORDER BY ma_loai_sp
-    """)
+def _build_category_filters(args):
+    where = []
+    params = []
+
+    keyword = (args.get("keyword") or "").strip()
+    if keyword:
+        like = f"%{keyword}%"
+        where.append("(ma_loai_sp LIKE ? OR ten_loai_sp LIKE ?)")
+        params.extend([like, like])
+
+    ma_chi_nhanh = args.get("ma_chi_nhanh")
+    if ma_chi_nhanh:
+        where.append("ma_chi_nhanh = ?")
+        params.append(ma_chi_nhanh)
+
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    return where_sql, params
+
+
+def get_all_categories_for_api(args=None):
+    args = args or {}
+    where_sql, where_params = _build_category_filters(args)
+    page, limit, offset = parse_pagination(args)
+
+    total_row = query_db(
+        "SELECT COUNT(*) AS total FROM loai_sp" + where_sql,
+        tuple(where_params),
+        fetchone=True,
+    )
+    total = total_row["total"] if total_row else 0
+
+    categories = query_db(
+        "SELECT ma_loai_sp, ten_loai_sp, ma_chi_nhanh FROM loai_sp"
+        + where_sql
+        + " ORDER BY ma_loai_sp OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+        tuple(where_params) + (offset, limit),
+    )
+
+    return {
+        "data": categories,
+        "pagination": build_pagination_meta(page, limit, total),
+    }
 
 
 def get_category_by_id_for_api(ma_loai_sp):

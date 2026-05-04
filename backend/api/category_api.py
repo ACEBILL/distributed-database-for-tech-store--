@@ -18,11 +18,24 @@ def api_loai_san_pham_list():
     ---
     tags:
       - Loại sản phẩm
+    parameters:
+      - name: keyword
+        in: query
+        schema: {type: string}
+      - name: ma_chi_nhanh
+        in: query
+        schema: {type: string}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50, maximum: 200}
     responses:
       200:
-        description: Danh sách loại sản phẩm
+        description: Danh sách loại sản phẩm + pagination
     """
-    return jsonify(get_all_categories_for_api())
+    return jsonify(get_all_categories_for_api(request.args))
 
 
 @category_api_bp.route("/loai-san-pham/<ma_loai_sp>")
@@ -31,9 +44,16 @@ def api_loai_san_pham_detail(ma_loai_sp):
     ---
     tags:
       - Loại sản phẩm
+    parameters:
+      - name: ma_loai_sp
+        in: path
+        required: true
+        schema: {type: string}
     responses:
       200:
         description: Chi tiết loại sản phẩm
+      404:
+        description: Không tìm thấy
     """
     category = get_category_by_id_for_api(ma_loai_sp)
     if not category:
@@ -47,9 +67,27 @@ def api_create_loai_san_pham():
     ---
     tags:
       - Loại sản phẩm
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - ma_loai_sp
+              - ten_loai_sp
+              - ma_chi_nhanh
+            properties:
+              ma_loai_sp: {type: string}
+              ten_loai_sp: {type: string}
+              ma_chi_nhanh: {type: string}
     responses:
       201:
         description: Loại sản phẩm đã được tạo
+      400:
+        description: Dữ liệu không hợp lệ
+      409:
+        description: Trùng mã hoặc vi phạm khóa ngoại ma_chi_nhanh
     """
     category = create_category(request.get_json(silent=True) or {})
     return jsonify(category), 201
@@ -61,9 +99,25 @@ def api_update_loai_san_pham(ma_loai_sp):
     ---
     tags:
       - Loại sản phẩm
+    parameters:
+      - name: ma_loai_sp
+        in: path
+        required: true
+        schema: {type: string}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ten_loai_sp: {type: string}
+              ma_chi_nhanh: {type: string}
     responses:
       200:
         description: Loại sản phẩm đã được cập nhật
+      404:
+        description: Không tìm thấy
     """
     category = update_category(ma_loai_sp, request.get_json(silent=True) or {})
     if not category:
@@ -77,9 +131,18 @@ def api_delete_loai_san_pham(ma_loai_sp):
     ---
     tags:
       - Loại sản phẩm
+    parameters:
+      - name: ma_loai_sp
+        in: path
+        required: true
+        schema: {type: string}
     responses:
       200:
         description: Loại sản phẩm đã được xóa
+      404:
+        description: Không tìm thấy
+      409:
+        description: Còn sản phẩm liên kết, không thể xóa
     """
     deleted = delete_category(ma_loai_sp)
     if not deleted:

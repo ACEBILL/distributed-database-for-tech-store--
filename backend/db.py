@@ -1,8 +1,38 @@
+import math
 import os
 
 import pyodbc
 import redis
 from flask import current_app
+
+
+DEFAULT_PAGE_LIMIT = 50
+MAX_PAGE_LIMIT = 200
+
+
+def parse_pagination(args, default_limit=DEFAULT_PAGE_LIMIT, max_limit=MAX_PAGE_LIMIT):
+    try:
+        page = int(args.get("page", 1))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        limit = int(args.get("limit", default_limit))
+    except (TypeError, ValueError):
+        limit = default_limit
+
+    page = max(1, page)
+    limit = max(1, min(limit, max_limit))
+    offset = (page - 1) * limit
+    return page, limit, offset
+
+
+def build_pagination_meta(page, limit, total):
+    return {
+        "page": page,
+        "limit": limit,
+        "total": total,
+        "total_pages": math.ceil(total / limit) if limit else 0,
+    }
 
 
 def get_db_connection():

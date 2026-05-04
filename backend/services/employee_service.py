@@ -1,23 +1,27 @@
-from db import execute_db, query_db
+from db import build_pagination_meta, execute_db, parse_pagination, query_db
 
 
-EMPLOYEE_SELECT_SQL = """
-    SELECT
-        nv.ma_nhan_vien,
-        nv.ho_ten,
-        nv.cccd,
-        nv.sdt,
-        nv.luong,
-        nv.trang_thai,
-        nv.ma_phong_ban,
-        nv.ma_ngay_lam,
-        nv.chuc_vu,
-        nv.ngay_bat_dau,
-        nv.ngay_ket_thuc,
-        pb.ten_pb
+EMPLOYEE_COLUMNS_SQL = """
+    nv.ma_nhan_vien,
+    nv.ho_ten,
+    nv.cccd,
+    nv.sdt,
+    nv.luong,
+    nv.trang_thai,
+    nv.ma_phong_ban,
+    nv.ma_ngay_lam,
+    nv.chuc_vu,
+    nv.ngay_bat_dau,
+    nv.ngay_ket_thuc,
+    pb.ten_pb
+"""
+
+EMPLOYEE_FROM_SQL = """
     FROM NHAN_VIEN nv
     LEFT JOIN phong_ban pb ON nv.ma_phong_ban = pb.ma_pb
 """
+
+EMPLOYEE_SELECT_SQL = "SELECT " + EMPLOYEE_COLUMNS_SQL + EMPLOYEE_FROM_SQL
 
 
 EMPLOYEE_MUTABLE_FIELDS = {
@@ -48,6 +52,43 @@ def format_employee(employee):
     return employee
 
 
+def _build_employee_filters(args):
+    where = []
+    params = []
+
+    keyword = (args.get("keyword") or "").strip()
+    if keyword:
+        like = f"%{keyword}%"
+        where.append(
+            "(nv.ho_ten LIKE ? OR nv.ma_nhan_vien LIKE ? OR nv.cccd LIKE ? OR nv.sdt LIKE ?)"
+        )
+        params.extend([like, like, like, like])
+
+    chuc_vu = args.get("chuc_vu")
+    if chuc_vu:
+        where.append("nv.chuc_vu = ?")
+        params.append(chuc_vu)
+
+    trang_thai = args.get("trang_thai")
+    if trang_thai not in (None, ""):
+        try:
+            where.append("nv.trang_thai = ?")
+            params.append(int(trang_thai))
+        except (TypeError, ValueError):
+            raise ValueError("trang_thai phải là số nguyên")
+
+    ma_phong_ban = args.get("ma_phong_ban")
+    if ma_phong_ban not in (None, ""):
+        try:
+            where.append("nv.ma_phong_ban = ?")
+            params.append(int(ma_phong_ban))
+        except (TypeError, ValueError):
+            raise ValueError("ma_phong_ban phải là số nguyên")
+
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    return where_sql, params
+
+
 def get_employee_by_id(ma_nhan_vien):
     return query_db(
         EMPLOYEE_SELECT_SQL + " WHERE nv.ma_nhan_vien = ?",
@@ -60,15 +101,31 @@ def get_employee_by_id_for_api(ma_nhan_vien):
     return format_employee(get_employee_by_id(ma_nhan_vien))
 
 
-def get_all_employees():
-    return query_db(EMPLOYEE_SELECT_SQL + " ORDER BY pb.ma_pb, nv.chuc_vu DESC")
+def get_all_employees_for_api(args=None):
+    args = args or {}
+    where_sql, where_params = _build_employee_filters(args)
+    page, limit, offset = parse_pagination(args)
 
+    total_row = query_db(
+        "SELECT COUNT(*) AS total " + EMPLOYEE_FROM_SQL + where_sql,
+        tuple(where_params),
+        fetchone=True,
+    )
+    total = total_row["total"] if total_row else 0
 
-def get_all_employees_for_api():
-    employees = get_all_employees()
+    employees = query_db(
+        EMPLOYEE_SELECT_SQL
+        + where_sql
+        + " ORDER BY nv.ma_nhan_vien OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
+        tuple(where_params) + (offset, limit),
+    )
     for employee in employees:
         format_employee(employee)
-    return employees
+
+    return {
+        "data": employees,
+        "pagination": build_pagination_meta(page, limit, total),
+    }
 
 
 def get_employees_by_department_id_for_api(ma_pb):

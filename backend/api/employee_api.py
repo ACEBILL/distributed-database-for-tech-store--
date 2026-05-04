@@ -20,30 +20,31 @@ def api_nhan_vien():
     ---
     tags:
       - Nhân viên
+    parameters:
+      - name: keyword
+        in: query
+        schema: {type: string}
+        description: Tìm theo ho_ten / ma_nhan_vien / cccd / sdt
+      - name: chuc_vu
+        in: query
+        schema: {type: string}
+      - name: trang_thai
+        in: query
+        schema: {type: integer}
+      - name: ma_phong_ban
+        in: query
+        schema: {type: integer}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50, maximum: 200}
     responses:
       200:
-        description: Danh sách nhân viên
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                type: object
-                properties:
-                  ma_nhan_vien:
-                    type: string
-                  ho_ten:
-                    type: string
-                  ten_pb:
-                    type: string
-                  chuc_vu:
-                    type: string
-                  luong:
-                    type: number
-                  trang_thai:
-                    type: integer
+        description: Danh sách nhân viên + pagination
     """
-    return jsonify(get_all_employees_for_api())
+    return jsonify(get_all_employees_for_api(request.args))
 
 
 @employee_api_bp.route("/nhan-vien/<ma_nhan_vien>")

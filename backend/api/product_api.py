@@ -16,40 +16,42 @@ product_api_bp = Blueprint("product_api", __name__, url_prefix="/api")
 @product_api_bp.route("/san-pham")
 def api_san_pham():
     """
-    Lấy danh sách sản phẩm đang bán
+    Lấy danh sách sản phẩm
     ---
     tags:
       - Sản phẩm
+    parameters:
+      - name: keyword
+        in: query
+        schema: {type: string}
+        description: Tìm theo ma_sp / ten_sp / mo_ta
+      - name: ma_loai_sp
+        in: query
+        schema: {type: string}
+      - name: ma_ncc
+        in: query
+        schema: {type: integer}
+      - name: trang_thai
+        in: query
+        schema: {type: integer}
+        description: 1 = đang bán, 0 = ngưng bán. Bỏ trống mặc định 1
+      - name: gia_min
+        in: query
+        schema: {type: number}
+      - name: gia_max
+        in: query
+        schema: {type: number}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50, maximum: 200}
     responses:
       200:
-        description: Danh sách sản phẩm, có thông tin nguồn cache/database
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                source:
-                  type: string
-                  example: database
-                data:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      ma_sp:
-                        type: string
-                      ten_sp:
-                        type: string
-                      gia:
-                        type: number
-                      ti_le_giam_gia:
-                        type: number
-                      ten_loai_sp:
-                        type: string
-                      ten_NCC:
-                        type: string
+        description: Danh sách sản phẩm + pagination. Khi không truyền filter sẽ dùng cache Redis
     """
-    return jsonify(get_products_for_api())
+    return jsonify(get_products_for_api(request.args))
 
 
 @product_api_bp.route("/san-pham/<ma_sp>")
@@ -58,9 +60,16 @@ def api_san_pham_detail(ma_sp):
     ---
     tags:
       - Sản phẩm
+    parameters:
+      - name: ma_sp
+        in: path
+        required: true
+        schema: {type: string}
     responses:
       200:
         description: Chi tiết sản phẩm
+      404:
+        description: Không tìm thấy sản phẩm
     """
     product = get_product_by_id_for_api(ma_sp)
     if not product:
@@ -74,9 +83,35 @@ def api_create_san_pham():
     ---
     tags:
       - Sản phẩm
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - ma_sp
+              - ten_sp
+              - gia
+              - ma_loai_sp
+              - ma_ncc
+            properties:
+              ma_sp: {type: string}
+              ten_sp: {type: string}
+              gia: {type: number}
+              ti_le_loi_nhuan: {type: number}
+              ti_le_giam_gia: {type: number}
+              mo_ta: {type: string}
+              ma_loai_sp: {type: string}
+              ma_ncc: {type: integer}
+              trang_thai: {type: integer}
     responses:
       201:
         description: Sản phẩm đã được tạo
+      400:
+        description: Dữ liệu không hợp lệ
+      409:
+        description: Trùng mã sản phẩm hoặc vi phạm khóa ngoại
     """
     product = create_product(request.get_json(silent=True) or {})
     return jsonify(product), 201
@@ -88,9 +123,31 @@ def api_update_san_pham(ma_sp):
     ---
     tags:
       - Sản phẩm
+    parameters:
+      - name: ma_sp
+        in: path
+        required: true
+        schema: {type: string}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ten_sp: {type: string}
+              gia: {type: number}
+              ti_le_loi_nhuan: {type: number}
+              ti_le_giam_gia: {type: number}
+              mo_ta: {type: string}
+              ma_loai_sp: {type: string}
+              ma_ncc: {type: integer}
+              trang_thai: {type: integer}
     responses:
       200:
         description: Sản phẩm đã được cập nhật
+      404:
+        description: Không tìm thấy sản phẩm
     """
     product = update_product(ma_sp, request.get_json(silent=True) or {})
     if not product:
@@ -104,9 +161,16 @@ def api_delete_san_pham(ma_sp):
     ---
     tags:
       - Sản phẩm
+    parameters:
+      - name: ma_sp
+        in: path
+        required: true
+        schema: {type: string}
     responses:
       200:
         description: Sản phẩm đã được ngưng bán
+      404:
+        description: Không tìm thấy sản phẩm
     """
     deleted = soft_delete_product(ma_sp)
     if not deleted:
@@ -133,6 +197,11 @@ def api_san_pham_by_chi_nhanh(ma_chi_nhanh):
     ---
     tags:
       - Sản phẩm
+    parameters:
+      - name: ma_chi_nhanh
+        in: path
+        required: true
+        schema: {type: string}
     responses:
       200:
         description: Dữ liệu sản phẩm thuộc một chi nhánh

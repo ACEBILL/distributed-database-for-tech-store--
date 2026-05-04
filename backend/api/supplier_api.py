@@ -18,11 +18,21 @@ def api_nha_cung_cap_list():
     ---
     tags:
       - Nhà cung cấp
+    parameters:
+      - name: keyword
+        in: query
+        schema: {type: string}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50, maximum: 200}
     responses:
       200:
-        description: Danh sách nhà cung cấp
+        description: Danh sách nhà cung cấp + pagination
     """
-    return jsonify(get_all_suppliers_for_api())
+    return jsonify(get_all_suppliers_for_api(request.args))
 
 
 @supplier_api_bp.route("/nha-cung-cap/<int:ma_ncc>")
@@ -31,9 +41,16 @@ def api_nha_cung_cap_detail(ma_ncc):
     ---
     tags:
       - Nhà cung cấp
+    parameters:
+      - name: ma_ncc
+        in: path
+        required: true
+        schema: {type: integer}
     responses:
       200:
         description: Chi tiết nhà cung cấp
+      404:
+        description: Không tìm thấy
     """
     supplier = get_supplier_by_id_for_api(ma_ncc)
     if not supplier:
@@ -47,9 +64,21 @@ def api_create_nha_cung_cap():
     ---
     tags:
       - Nhà cung cấp
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - ten_ncc
+            properties:
+              ten_ncc: {type: string}
     responses:
       201:
         description: Nhà cung cấp đã được tạo
+      400:
+        description: Dữ liệu không hợp lệ
     """
     supplier = create_supplier(request.get_json(silent=True) or {})
     return jsonify(supplier), 201
@@ -61,9 +90,24 @@ def api_update_nha_cung_cap(ma_ncc):
     ---
     tags:
       - Nhà cung cấp
+    parameters:
+      - name: ma_ncc
+        in: path
+        required: true
+        schema: {type: integer}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ten_ncc: {type: string}
     responses:
       200:
         description: Nhà cung cấp đã được cập nhật
+      404:
+        description: Không tìm thấy
     """
     supplier = update_supplier(ma_ncc, request.get_json(silent=True) or {})
     if not supplier:
@@ -77,9 +121,18 @@ def api_delete_nha_cung_cap(ma_ncc):
     ---
     tags:
       - Nhà cung cấp
+    parameters:
+      - name: ma_ncc
+        in: path
+        required: true
+        schema: {type: integer}
     responses:
       200:
         description: Nhà cung cấp đã được xóa
+      404:
+        description: Không tìm thấy
+      409:
+        description: Còn sản phẩm liên kết, không thể xóa
     """
     deleted = delete_supplier(ma_ncc)
     if not deleted:

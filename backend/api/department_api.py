@@ -19,11 +19,21 @@ def api_phong_ban_list():
     ---
     tags:
       - Phòng ban
+    parameters:
+      - name: keyword
+        in: query
+        schema: {type: string}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50, maximum: 200}
     responses:
       200:
-        description: Danh sách phòng ban
+        description: Danh sách phòng ban + pagination
     """
-    return jsonify(get_all_departments_for_api())
+    return jsonify(get_all_departments_for_api(request.args))
 
 
 @department_api_bp.route("/phong-ban/<int:ma_pb>")
