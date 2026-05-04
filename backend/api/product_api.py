@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from middleware.auth import require_auth
 from services.product_service import (
     create_product,
     get_product_by_id_for_api,
@@ -78,6 +79,7 @@ def api_san_pham_detail(ma_sp):
 
 
 @product_api_bp.route("/san-pham", methods=["POST"])
+@require_auth
 def api_create_san_pham():
     """Tạo sản phẩm
     ---
@@ -118,6 +120,7 @@ def api_create_san_pham():
 
 
 @product_api_bp.route("/san-pham/<ma_sp>", methods=["PUT"])
+@require_auth
 def api_update_san_pham(ma_sp):
     """Cập nhật sản phẩm
     ---
@@ -156,6 +159,7 @@ def api_update_san_pham(ma_sp):
 
 
 @product_api_bp.route("/san-pham/<ma_sp>", methods=["DELETE"])
+@require_auth
 def api_delete_san_pham(ma_sp):
     """Ngưng bán sản phẩm
     ---
@@ -207,3 +211,55 @@ def api_san_pham_by_chi_nhanh(ma_chi_nhanh):
         description: Dữ liệu sản phẩm thuộc một chi nhánh
     """
     return jsonify(get_products_by_branch_for_api(ma_chi_nhanh))
+
+
+@product_api_bp.route("/san-pham/loai/<ma_loai_sp>")
+def api_san_pham_by_loai(ma_loai_sp):
+    """Lấy sản phẩm theo mã loại sản phẩm
+    ---
+    tags:
+      - Sản phẩm
+    parameters:
+      - name: ma_loai_sp
+        in: path
+        required: true
+        schema: {type: string}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50, maximum: 200}
+    responses:
+      200:
+        description: Sản phẩm thuộc loại đã chọn
+    """
+    args = request.args.to_dict()
+    args["ma_loai_sp"] = ma_loai_sp
+    return jsonify(get_products_for_api(args))
+
+
+@product_api_bp.route("/san-pham/ncc/<int:ma_ncc>")
+def api_san_pham_by_ncc(ma_ncc):
+    """Lấy sản phẩm theo mã nhà cung cấp
+    ---
+    tags:
+      - Sản phẩm
+    parameters:
+      - name: ma_ncc
+        in: path
+        required: true
+        schema: {type: integer}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50, maximum: 200}
+    responses:
+      200:
+        description: Sản phẩm thuộc nhà cung cấp đã chọn
+    """
+    args = request.args.to_dict()
+    args["ma_ncc"] = str(ma_ncc)
+    return jsonify(get_products_for_api(args))

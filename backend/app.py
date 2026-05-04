@@ -1,6 +1,7 @@
 from flasgger import Swagger
 from flask import Flask
 
+from api.auth_api import auth_api_bp
 from api.branch_api import branch_api_bp
 from api.category_api import category_api_bp
 from api.department_api import department_api_bp
@@ -20,8 +21,18 @@ def create_app():
         "uiversion": 3,
         "openapi": "3.0.2",
         "specs_route": "/apidocs/",
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "bearerFormat": "JWT",
+                }
+            }
+        },
     }
 
+    app.register_blueprint(auth_api_bp)
     app.register_blueprint(branch_api_bp)
     app.register_blueprint(category_api_bp)
     app.register_blueprint(department_api_bp)

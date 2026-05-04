@@ -12,3 +12,7 @@ class Config:
 
     REDIS_HOST = os.getenv("REDIS_HOST", "redis")
     REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+
+    JWT_SECRET = os.getenv("JWT_SECRET", "dev-jwt-secret-change-in-production")
+    JWT_ALGORITHM = "HS256"
+    JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", 8))

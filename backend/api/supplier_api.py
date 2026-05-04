@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from middleware.auth import require_auth
 from services.supplier_service import (
     create_supplier,
     delete_supplier,
@@ -59,6 +60,7 @@ def api_nha_cung_cap_detail(ma_ncc):
 
 
 @supplier_api_bp.route("/nha-cung-cap", methods=["POST"])
+@require_auth
 def api_create_nha_cung_cap():
     """Tạo nhà cung cấp
     ---
@@ -85,6 +87,7 @@ def api_create_nha_cung_cap():
 
 
 @supplier_api_bp.route("/nha-cung-cap/<int:ma_ncc>", methods=["PUT"])
+@require_auth
 def api_update_nha_cung_cap(ma_ncc):
     """Cập nhật nhà cung cấp
     ---
@@ -116,6 +119,7 @@ def api_update_nha_cung_cap(ma_ncc):
 
 
 @supplier_api_bp.route("/nha-cung-cap/<int:ma_ncc>", methods=["DELETE"])
+@require_auth
 def api_delete_nha_cung_cap(ma_ncc):
     """Xóa nhà cung cấp
     ---

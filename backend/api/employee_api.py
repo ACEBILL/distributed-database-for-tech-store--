@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 
+from middleware.auth import require_auth
 from services.employee_service import (
     create_employee,
     get_all_employees_for_api,
@@ -73,6 +74,7 @@ def api_nhan_vien_detail(ma_nhan_vien):
 
 
 @employee_api_bp.route("/nhan-vien", methods=["POST"])
+@require_auth
 def api_create_nhan_vien():
     """
     Tạo nhân viên
@@ -118,6 +120,7 @@ def api_create_nhan_vien():
 
 
 @employee_api_bp.route("/nhan-vien/<ma_nhan_vien>", methods=["PUT"])
+@require_auth
 def api_update_nhan_vien(ma_nhan_vien):
     """
     Cập nhật nhân viên
@@ -172,6 +175,7 @@ def api_update_nhan_vien(ma_nhan_vien):
 
 
 @employee_api_bp.route("/nhan-vien/<ma_nhan_vien>", methods=["DELETE"])
+@require_auth
 def api_delete_nhan_vien(ma_nhan_vien):
     """
     Xóa mềm nhân viên
