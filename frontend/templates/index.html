@@ -7,94 +7,182 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <header class="topbar">
-        <div>
-            <div class="app-title">Quản lý chi nhánh</div>
-            <div class="app-subtitle">Frontend client dùng dữ liệu từ Flask API</div>
-        </div>
-        <button id="refreshBtn" class="btn">Tải lại</button>
-    </header>
+    <main id="loginView" class="login-shell">
+        <section class="login-panel">
+            <div class="login-copy">
+                <p class="eyebrow">Tech Store</p>
+                <h1>Đăng nhập quản lý chi nhánh</h1>
+                <p>Theo dõi sản phẩm, nhân viên và trạng thái dữ liệu chi nhánh.</p>
+            </div>
 
-    <main class="layout">
-        <section class="summary-grid">
-            <div class="metric">
-                <span class="metric-label">Sản phẩm</span>
-                <strong id="productCount">...</strong>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Nhân viên</span>
-                <strong id="employeeCount">...</strong>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Chi nhánh</span>
-                <strong id="branchCount">...</strong>
-            </div>
-        </section>
+            <form id="loginForm" class="login-form">
+                <label for="employeeCode">Mã nhân viên</label>
+                <input id="employeeCode" name="ma_nhan_vien" type="text" autocomplete="username" value="NV001" required>
 
-        <section class="section">
-            <div class="section-header">
-                <h1>Chi nhánh</h1>
-                <span class="status" id="branchStatus">Đang tải</span>
-            </div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Mã</th>
-                            <th>Tên chi nhánh</th>
-                            <th>Hệ CSDL</th>
-                            <th>Trạng thái DB</th>
-                        </tr>
-                    </thead>
-                    <tbody id="branchRows"></tbody>
-                </table>
-            </div>
-        </section>
+                <label for="password">Mật khẩu</label>
+                <input id="password" name="mat_khau" type="password" autocomplete="current-password" value="pass123" required>
 
-        <section class="section">
-            <div class="section-header">
-                <h1>Sản phẩm</h1>
-                <span class="status" id="productSource">Đang tải</span>
-            </div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Mã</th>
-                            <th>Tên sản phẩm</th>
-                            <th>Loại</th>
-                            <th>Nhà cung cấp</th>
-                            <th class="right">Giá</th>
-                            <th class="right">Giảm giá</th>
-                        </tr>
-                    </thead>
-                    <tbody id="productRows"></tbody>
-                </table>
-            </div>
-        </section>
-
-        <section class="section">
-            <div class="section-header">
-                <h1>Nhân viên</h1>
-                <span class="status" id="employeeStatus">Đang tải</span>
-            </div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Mã</th>
-                            <th>Họ tên</th>
-                            <th>Phòng ban</th>
-                            <th>Chức vụ</th>
-                            <th class="right">Lương</th>
-                            <th>Trạng thái</th>
-                        </tr>
-                    </thead>
-                    <tbody id="employeeRows"></tbody>
-                </table>
-            </div>
+                <button id="loginBtn" class="btn btn-primary" type="submit">Đăng nhập</button>
+                <div id="loginError" class="form-error" role="alert"></div>
+            </form>
         </section>
     </main>
+
+    <div id="appView" class="app-shell hidden">
+        <aside class="sidebar-left">
+            <div class="brand-block">
+                <div class="brand-mark">TS</div>
+                <div>
+                    <div class="brand-name">Tech Store</div>
+                    <div class="brand-subtitle">Quản trị chi nhánh</div>
+                </div>
+            </div>
+
+            <nav class="side-nav" aria-label="Điều hướng chính">
+                <button class="nav-item active" type="button" data-view="overviewView">
+                    <span class="nav-icon">⌂</span>
+                    <span>Tổng quan</span>
+                </button>
+                <button class="nav-item" type="button" data-view="branchesView">
+                    <span class="nav-icon">⌬</span>
+                    <span>Chi nhánh</span>
+                </button>
+                <button class="nav-item" type="button" data-view="productsView">
+                    <span class="nav-icon">□</span>
+                    <span>Sản phẩm</span>
+                </button>
+                <button class="nav-item" type="button" data-view="employeesView">
+                    <span class="nav-icon">◉</span>
+                    <span>Nhân viên</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div id="sidebarUser" class="sidebar-user">Đang đăng nhập</div>
+                <button id="logoutBtn" class="btn btn-ghost" type="button">Đăng xuất</button>
+            </div>
+        </aside>
+
+        <section class="workspace">
+            <header class="topbar">
+                <div>
+                    <div id="pageTitle" class="app-title">Tổng quan</div>
+                    <div id="userLabel" class="app-subtitle">Đang đăng nhập</div>
+                </div>
+                <button id="refreshBtn" class="btn" type="button">Tải lại</button>
+            </header>
+
+            <main class="layout">
+                <section id="overviewView" class="view-panel active">
+                    <div class="summary-grid">
+                        <button class="metric metric-link" type="button" data-view="productsView">
+                            <span class="metric-label">Sản phẩm</span>
+                            <strong id="productCount">...</strong>
+                        </button>
+                        <button class="metric metric-link" type="button" data-view="employeesView">
+                            <span class="metric-label">Nhân viên</span>
+                            <strong id="employeeCount">...</strong>
+                        </button>
+                        <button class="metric metric-link" type="button" data-view="branchesView">
+                            <span class="metric-label">Chi nhánh</span>
+                            <strong id="branchCount">...</strong>
+                        </button>
+                    </div>
+
+                    <section class="section">
+                        <div class="section-header">
+                            <h1>Tình trạng dữ liệu</h1>
+                            <span class="status" id="overviewStatus">Đang tải</span>
+                        </div>
+                        <div class="quick-grid">
+                            <div class="quick-item">
+                                <span>Nguồn sản phẩm</span>
+                                <strong id="overviewProductSource">...</strong>
+                            </div>
+                            <div class="quick-item">
+                                <span>Hệ CSDL chính</span>
+                                <strong>MySQL</strong>
+                            </div>
+                            <div class="quick-item">
+                                <span>Cache</span>
+                                <strong>Redis</strong>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+
+                <section id="branchesView" class="view-panel">
+                    <section class="section">
+                        <div class="section-header">
+                            <h1>Chi nhánh</h1>
+                            <span class="status" id="branchStatus">Đang tải</span>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Mã</th>
+                                        <th>Tên chi nhánh</th>
+                                        <th>Hệ CSDL</th>
+                                        <th>Trạng thái DB</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="branchRows"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </section>
+
+                <section id="productsView" class="view-panel">
+                    <section class="section">
+                        <div class="section-header">
+                            <h1>Sản phẩm</h1>
+                            <span class="status" id="productSource">Đang tải</span>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Mã</th>
+                                        <th>Tên sản phẩm</th>
+                                        <th>Loại</th>
+                                        <th>Nhà cung cấp</th>
+                                        <th class="right">Giá</th>
+                                        <th class="right">Giảm giá</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="productRows"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </section>
+
+                <section id="employeesView" class="view-panel">
+                    <section class="section">
+                        <div class="section-header">
+                            <h1>Nhân viên</h1>
+                            <span class="status" id="employeeStatus">Đang tải</span>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Mã</th>
+                                        <th>Họ tên</th>
+                                        <th>Phòng ban</th>
+                                        <th>Chức vụ</th>
+                                        <th class="right">Lương</th>
+                                        <th>Trạng thái</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="employeeRows"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </section>
+            </main>
+        </section>
+    </div>
 
     <script src="/static/js/app.js"></script>
 </body>

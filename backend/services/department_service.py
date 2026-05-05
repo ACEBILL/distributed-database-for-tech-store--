@@ -1,4 +1,12 @@
-from db import build_pagination_meta, execute_db, execute_db_fetchone, parse_pagination, query_db
+from db import (
+    build_pagination_meta,
+    execute_db,
+    execute_db_fetchone,
+    get_db_engine,
+    pagination_clause,
+    parse_pagination,
+    query_db,
+)
 
 
 DEPARTMENT_COLUMNS_SQL = "ma_pb, ten_pb, ma_nv"
@@ -31,11 +39,10 @@ def get_all_departments_for_api(args=None):
     )
     total = total_row["total"] if total_row else 0
 
+    page_clause, page_params = pagination_clause("ma_pb", offset, limit)
     departments = query_db(
-        DEPARTMENT_SELECT_SQL
-        + where_sql
-        + " ORDER BY ma_pb OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
-        tuple(where_params) + (offset, limit),
+        DEPARTMENT_SELECT_SQL + where_sql + page_clause,
+        tuple(where_params) + page_params,
     )
 
     return {
@@ -55,6 +62,13 @@ def get_department_by_id_for_api(ma_pb):
 def create_department(data):
     if not data.get("ten_pb"):
         raise ValueError("Missing required field: ten_pb")
+
+    if get_db_engine() == "mysql":
+        row = execute_db_fetchone(
+            "INSERT INTO phong_ban (ten_pb, ma_nv) VALUES (?, ?)",
+            (data["ten_pb"], data.get("ma_nv")),
+        )
+        return get_department_by_id_for_api(row["lastrowid"])
 
     row = execute_db_fetchone(
         """

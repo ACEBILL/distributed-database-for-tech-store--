@@ -1,4 +1,12 @@
-from db import build_pagination_meta, execute_db, parse_pagination, query_db
+from db import (
+    build_pagination_meta,
+    execute_db,
+    now_sql,
+    pagination_clause,
+    parse_pagination,
+    password_hash_sql,
+    query_db,
+)
 
 
 EMPLOYEE_COLUMNS_SQL = """
@@ -113,11 +121,12 @@ def get_all_employees_for_api(args=None):
     )
     total = total_row["total"] if total_row else 0
 
+    page_clause, page_params = pagination_clause("nv.ma_nhan_vien", offset, limit)
     employees = query_db(
         EMPLOYEE_SELECT_SQL
         + where_sql
-        + " ORDER BY nv.ma_nhan_vien OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
-        tuple(where_params) + (offset, limit),
+        + page_clause,
+        tuple(where_params) + page_params,
     )
     for employee in employees:
         format_employee(employee)
@@ -156,10 +165,10 @@ def create_employee(data):
         )
         VALUES (
             ?, ?, ?, ?, ?,
-            CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', ?), 2),
+            {password_hash},
             ?, ?, ?, ?, ?, ?
         )
-        """,
+        """.format(password_hash=password_hash_sql()),
         (
             data["ma_nhan_vien"],
             data["ho_ten"],
@@ -192,7 +201,7 @@ def update_employee(ma_nhan_vien, data):
             params.append(data[field])
 
     if "mat_khau" in data:
-        assignments.append("mat_khau = CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', ?), 2)")
+        assignments.append(f"mat_khau = {password_hash_sql()}")
         params.append(data["mat_khau"])
 
     if not assignments:
@@ -214,9 +223,9 @@ def soft_delete_employee(ma_nhan_vien):
     affected_rows = execute_db(
         """
         UPDATE NHAN_VIEN
-        SET trang_thai = 0, ngay_ket_thuc = COALESCE(ngay_ket_thuc, GETDATE())
+        SET trang_thai = 0, ngay_ket_thuc = COALESCE(ngay_ket_thuc, {now})
         WHERE ma_nhan_vien = ?
-        """,
+        """.format(now=now_sql()),
         (ma_nhan_vien,),
     )
     return affected_rows > 0

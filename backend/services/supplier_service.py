@@ -1,4 +1,12 @@
-from db import build_pagination_meta, execute_db, execute_db_fetchone, parse_pagination, query_db
+from db import (
+    build_pagination_meta,
+    execute_db,
+    execute_db_fetchone,
+    get_db_engine,
+    pagination_clause,
+    parse_pagination,
+    query_db,
+)
 
 
 def _build_supplier_filters(args):
@@ -27,11 +35,12 @@ def get_all_suppliers_for_api(args=None):
     )
     total = total_row["total"] if total_row else 0
 
+    page_clause, page_params = pagination_clause("ma_NCC", offset, limit)
     suppliers = query_db(
         "SELECT ma_NCC AS ma_ncc, ten_NCC AS ten_ncc FROM NCC"
         + where_sql
-        + " ORDER BY ma_NCC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
-        tuple(where_params) + (offset, limit),
+        + page_clause,
+        tuple(where_params) + page_params,
     )
 
     return {
@@ -55,6 +64,13 @@ def get_supplier_by_id_for_api(ma_ncc):
 def create_supplier(data):
     if not data.get("ten_ncc"):
         raise ValueError("Missing required field: ten_ncc")
+
+    if get_db_engine() == "mysql":
+        row = execute_db_fetchone(
+            "INSERT INTO NCC (ten_NCC) VALUES (?)",
+            (data["ten_ncc"],),
+        )
+        return get_supplier_by_id_for_api(row["lastrowid"])
 
     return execute_db_fetchone(
         """

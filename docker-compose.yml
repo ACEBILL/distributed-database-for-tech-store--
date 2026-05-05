@@ -2,6 +2,8 @@ services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sqlserver
+    profiles:
+      - sqlserver
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
@@ -24,6 +26,8 @@ services:
   mssql-init:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: mssql-init
+    profiles:
+      - sqlserver
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -37,6 +41,29 @@ services:
         /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P '${DB_PASSWORD:-MyPass@2025}' -C -b -i /scripts/01-schema-and-data.sql &&
         echo 'Database is ready.'
       "
+
+  mysql:
+    image: mysql:8.4
+    container_name: mysql-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-RootPass@2025}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-quan_ly_chi_nhanh}
+      MYSQL_USER: ${MYSQL_USER:-techstore}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-MyPass@2025}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init/mysql:/docker-entrypoint-initdb.d
+    networks:
+      - db-cluster
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u${MYSQL_USER:-techstore} -p${DB_PASSWORD:-MyPass@2025} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
   redis:
     image: redis:7-alpine
@@ -58,22 +85,23 @@ services:
     environment:
       FLASK_ENV: development
       FLASK_DEBUG: "1"
-      DB_HOST: ${DB_HOST:-sqlserver}
-      DB_PORT: ${DB_PORT:-1433}
-      DB_USER: ${DB_USER:-sa}
+      DB_ENGINE: ${DB_ENGINE:-mysql}
+      DB_HOST: ${DB_HOST:-mysql}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-techstore}
       DB_PASSWORD: ${DB_PASSWORD:-MyPass@2025}
       DB_NAME: ${DB_NAME:-quan_ly_chi_nhanh}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       BRANCH_CN01_DB_HOST: ${BRANCH_CN01_DB_HOST:-}
-      BRANCH_CN01_DB_ENGINE: ${BRANCH_CN01_DB_ENGINE:-sqlserver}
-      BRANCH_CN01_DB_PORT: ${BRANCH_CN01_DB_PORT:-1433}
+      BRANCH_CN01_DB_ENGINE: ${BRANCH_CN01_DB_ENGINE:-mysql}
+      BRANCH_CN01_DB_PORT: ${BRANCH_CN01_DB_PORT:-3306}
       BRANCH_CN01_DB_NAME: ${BRANCH_CN01_DB_NAME:-}
       BRANCH_CN01_DB_USER: ${BRANCH_CN01_DB_USER:-}
       BRANCH_CN01_DB_PASSWORD: ${BRANCH_CN01_DB_PASSWORD:-}
       BRANCH_CN02_DB_HOST: ${BRANCH_CN02_DB_HOST:-}
-      BRANCH_CN02_DB_ENGINE: ${BRANCH_CN02_DB_ENGINE:-sqlserver}
-      BRANCH_CN02_DB_PORT: ${BRANCH_CN02_DB_PORT:-1433}
+      BRANCH_CN02_DB_ENGINE: ${BRANCH_CN02_DB_ENGINE:-mysql}
+      BRANCH_CN02_DB_PORT: ${BRANCH_CN02_DB_PORT:-3306}
       BRANCH_CN02_DB_NAME: ${BRANCH_CN02_DB_NAME:-}
       BRANCH_CN02_DB_USER: ${BRANCH_CN02_DB_USER:-}
       BRANCH_CN02_DB_PASSWORD: ${BRANCH_CN02_DB_PASSWORD:-}
@@ -82,8 +110,8 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      mssql-init:
-        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
       redis:
         condition: service_started
     networks:
@@ -104,6 +132,7 @@ services:
 
 volumes:
   mssql-data:
+  mysql-data:
   redis-data:
 
 networks:

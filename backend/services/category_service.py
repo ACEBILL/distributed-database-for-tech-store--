@@ -1,4 +1,10 @@
-from db import build_pagination_meta, execute_db, parse_pagination, query_db
+from db import (
+    build_pagination_meta,
+    execute_db,
+    pagination_clause,
+    parse_pagination,
+    query_db,
+)
 
 
 def _build_category_filters(args):
@@ -32,11 +38,12 @@ def get_all_categories_for_api(args=None):
     )
     total = total_row["total"] if total_row else 0
 
+    page_clause, page_params = pagination_clause("ma_loai_sp", offset, limit)
     categories = query_db(
         "SELECT ma_loai_sp, ten_loai_sp, ma_chi_nhanh FROM loai_sp"
         + where_sql
-        + " ORDER BY ma_loai_sp OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
-        tuple(where_params) + (offset, limit),
+        + page_clause,
+        tuple(where_params) + page_params,
     )
 
     return {

@@ -3,6 +3,7 @@ from db import (
     execute_db,
     get_branch_db_engine,
     has_branch_db_settings,
+    pagination_clause,
     parse_pagination,
     query_branch_db,
     query_db,
@@ -43,11 +44,12 @@ def get_branches_for_api(args=None):
     )
     total = total_row["total"] if total_row else 0
 
+    page_clause, page_params = pagination_clause("ma_chi_nhanh", offset, limit)
     branches = query_db(
         "SELECT ma_chi_nhanh, ten_chi_nhanh FROM chi_nhanh"
         + where_sql
-        + " ORDER BY ma_chi_nhanh OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
-        tuple(where_params) + (offset, limit),
+        + page_clause,
+        tuple(where_params) + page_params,
     )
 
     return {
@@ -134,8 +136,6 @@ def get_branch_analysis_for_api():
 
 
 def get_products_by_branch_for_api(ma_chi_nhanh):
-    """Lấy sản phẩm theo chi nhánh từ view v_san_pham_theo_chi_nhanh"""
-    # Kiểm tra chi nhánh tồn tại
     branch = get_branch_by_id(ma_chi_nhanh)
     if not branch:
         return []
@@ -150,7 +150,6 @@ def get_products_by_branch_for_api(ma_chi_nhanh):
         (ma_chi_nhanh,),
     )
 
-    # Định dạng số tiền
     for product in products:
         for field in ["gia", "ti_le_loi_nhuan", "ti_le_giam_gia", "gia_ban_thuc_te"]:
             if field in product:
@@ -175,11 +174,6 @@ def check_branch_health(ma_chi_nhanh):
 
     if not has_branch_db_settings(ma_chi_nhanh):
         result["status"] = "not_configured"
-        return result
-
-    if engine != "sqlserver":
-        result["status"] = "unsupported_engine"
-        result["error"] = f"Driver chưa hỗ trợ engine: {engine}"
         return result
 
     try:

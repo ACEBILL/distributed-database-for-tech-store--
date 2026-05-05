@@ -1,6 +1,13 @@
 import json
 
-from db import build_pagination_meta, execute_db, parse_pagination, query_db
+from db import (
+    build_pagination_meta,
+    execute_db,
+    now_sql,
+    pagination_clause,
+    parse_pagination,
+    query_db,
+)
 from services.cache_service import delete_cache, get_cache, set_cache
 
 
@@ -160,7 +167,7 @@ def update_product(ma_sp, data):
     if not assignments:
         raise ValueError("No valid fields to update")
 
-    assignments.append("cap_nhat_vao = GETDATE()")
+    assignments.append(f"cap_nhat_vao = {now_sql()}")
     params.append(ma_sp)
     affected_rows = execute_db(
         f"UPDATE SAN_PHAM SET {', '.join(assignments)} WHERE ma_sp = ?",
@@ -178,9 +185,9 @@ def soft_delete_product(ma_sp):
     affected_rows = execute_db(
         """
         UPDATE SAN_PHAM
-        SET trang_thai = 0, cap_nhat_vao = GETDATE()
+        SET trang_thai = 0, cap_nhat_vao = {now}
         WHERE ma_sp = ?
-        """,
+        """.format(now=now_sql()),
         (ma_sp,),
     )
     if affected_rows:
@@ -250,6 +257,7 @@ def get_products_for_api(args=None):
     )
     total = total_row["total"] if total_row else 0
 
+    page_clause, page_params = pagination_clause("sp.ma_sp", offset, limit)
     products = query_db(
         """
         SELECT sp.ma_sp, sp.ten_sp, sp.gia, sp.ti_le_giam_gia,
@@ -258,8 +266,8 @@ def get_products_for_api(args=None):
         """
         + PRODUCT_BASE_SQL
         + where_sql
-        + " ORDER BY sp.ma_sp OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
-        tuple(where_params) + (offset, limit),
+        + page_clause,
+        tuple(where_params) + page_params,
     )
     for product in products:
         format_product(product)
