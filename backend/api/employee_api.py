@@ -1,11 +1,13 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
-from middleware.auth import require_auth
+from middleware.auth import require_auth, require_role
 from services.employee_service import (
     create_employee,
     get_all_employees_for_api,
     get_employee_by_id_for_api,
     get_employees_by_department_id_for_api,
+    mask_sensitive_employee_fields,
+    mask_employees_list,
     soft_delete_employee,
     update_employee,
 )
@@ -15,6 +17,7 @@ employee_api_bp = Blueprint("employee_api", __name__, url_prefix="/api")
 
 
 @employee_api_bp.route("/nhan-vien")
+@require_auth
 def api_nhan_vien():
     """
     Lấy danh sách nhân viên
@@ -43,12 +46,22 @@ def api_nhan_vien():
         schema: {type: integer, default: 50, maximum: 200}
     responses:
       200:
-        description: Danh sách nhân viên + pagination
+        description: Danh sách nhân viên + pagination. Trường cccd, sdt, luong được ẩn nếu user không phải admin/giam_doc
     """
-    return jsonify(get_all_employees_for_api(request.args))
+    result = get_all_employees_for_api(request.args)
+    
+    # Kiểm tra xem user có phải admin/giam_doc không
+    is_admin = g.current_user.get("chuc_vu") in ("admin", "giam_doc")
+    
+    # Ẩn thông tin nhạy cảm nếu không phải admin
+    if not is_admin:
+        result["data"] = mask_employees_list(result["data"], is_admin)
+    
+    return jsonify(result)
 
 
 @employee_api_bp.route("/nhan-vien/<ma_nhan_vien>")
+@require_auth
 def api_nhan_vien_detail(ma_nhan_vien):
     """
     Lấy chi tiết nhân viên
@@ -63,18 +76,21 @@ def api_nhan_vien_detail(ma_nhan_vien):
           type: string
     responses:
       200:
-        description: Chi tiết nhân viên
+        description: Chi tiết nhân viên. Trường cccd, sdt, luong được ẩn nếu user không phải admin/giam_doc
       404:
         description: Không tìm thấy nhân viên
     """
     employee = get_employee_by_id_for_api(ma_nhan_vien)
     if not employee:
         return jsonify({"error": "Employee not found"}), 404
-    return jsonify(employee)
+    
+    # Ẩn thông tin nhạy cảm nếu không phải admin
+    is_admin = g.current_user.get("chuc_vu") in ("admin", "giam_doc")
+    return jsonify(mask_sensitive_employee_fields(employee, is_admin))
 
 
 @employee_api_bp.route("/nhan-vien", methods=["POST"])
-@require_auth
+@require_role("admin", "giam_doc")
 def api_create_nhan_vien():
     """
     Tạo nhân viên
@@ -120,7 +136,7 @@ def api_create_nhan_vien():
 
 
 @employee_api_bp.route("/nhan-vien/<ma_nhan_vien>", methods=["PUT"])
-@require_auth
+@require_role("admin", "giam_doc")
 def api_update_nhan_vien(ma_nhan_vien):
     """
     Cập nhật nhân viên
@@ -175,7 +191,7 @@ def api_update_nhan_vien(ma_nhan_vien):
 
 
 @employee_api_bp.route("/nhan-vien/<ma_nhan_vien>", methods=["DELETE"])
-@require_auth
+@require_role("admin", "giam_doc")
 def api_delete_nhan_vien(ma_nhan_vien):
     """
     Xóa mềm nhân viên

@@ -2,6 +2,7 @@
 
 Project dùng Flask API, SQL Server và Redis. Backend hiện chỉ trả JSON cho API client, không còn render HTML template.
 
+
 ## Yêu cầu
 
 - Docker Desktop đang chạy
@@ -53,6 +54,14 @@ OpenAPI JSON:
 ```text
 http://localhost:5000/apispec_1.json
 ```
+
+### Ghi chú triển khai hiện tại
+
+- `POST /api/auth/login` trả JWT cho người dùng hợp lệ, mặc định dữ liệu mẫu dùng mật khẩu `pass123`.
+- `GET /api/nhan-vien` và `GET /api/nhan-vien/<ma_nhan_vien>` yêu cầu xác thực; các trường nhạy cảm được che với user không phải admin/giam_doc.
+- Các thao tác ghi trên sản phẩm, loại sản phẩm, nhà cung cấp, nhân viên, chi nhánh và phòng ban đã được giới hạn theo vai trò.
+- Redis đang cache danh sách sản phẩm bằng key `cache:san_pham_list`.
+- Nhánh dữ liệu thống kê theo chi nhánh hiện có hai mã mẫu là `CN01` và `CN02`.
 
 ### Hiện đã có
 
@@ -169,10 +178,8 @@ Các route dưới đây là roadmap dựa trên schema trong `init/mssql/01-sch
 |---|---|---|
 | `GET` | `/api/thong-ke/chi-nhanh` | `*` Lấy dữ liệu từ view `v_thong_ke_chi_nhanh` |
 | `GET` | `/api/thong-ke/luong-phong-ban` | `*` Lấy dữ liệu từ view `v_luong_phong_ban` |
-| `GET` | `/api/thong-ke/san-pham-theo-chi-nhanh/<ma_chi_nhanh>` | Lấy dữ liệu từ `ma_chi_nhanh` |
-| `GET` | `/api/thong-ke/don-hang-theo-chi-nhanh/<ma_chi_nhanh>` | Lấy dữ liệu từ `ma_chi_nhanh` |
-| `GET` | `/api/thong-ke/nhan-vien-theo-chi-nhanh/<ma_chi_nhanh>` | Lấy dữ liệu từ `ma_chi_nhanh` |
-| `GET` | `/api/thong-ke/don-hang-theo-chi-nhanh/<ma_chi_nhanh>` | Lấy dữ liệu từ `ma_chi_nhanh` |
+| `GET` | `/api/thong-ke/san-pham-theo-chi-nhanh/<ma_chi_nhanh>` | `*` Lấy sản phẩm theo chi nhánh từ `v_san_pham_theo_chi_nhanh` |
+| `GET` | `/api/thong-ke/nhan-vien-theo-chi-nhanh/<ma_chi_nhanh>` | `*` Lấy nhân viên theo chi nhánh (Lưu ý: Schema hiện không hỗ trợ liên kết trực tiếp nhân viên-chi nhánh) |
 
 
 ## Cấu trúc project

@@ -133,6 +133,32 @@ def get_branch_analysis_for_api():
     return stats
 
 
+def get_products_by_branch_for_api(ma_chi_nhanh):
+    """Lấy sản phẩm theo chi nhánh từ view v_san_pham_theo_chi_nhanh"""
+    # Kiểm tra chi nhánh tồn tại
+    branch = get_branch_by_id(ma_chi_nhanh)
+    if not branch:
+        return []
+
+    products = query_db(
+        """
+        SELECT *
+        FROM v_san_pham_theo_chi_nhanh
+        WHERE ma_chi_nhanh = ?
+        ORDER BY ma_sp
+        """,
+        (ma_chi_nhanh,),
+    )
+
+    # Định dạng số tiền
+    for product in products:
+        for field in ["gia", "ti_le_loi_nhuan", "ti_le_giam_gia", "gia_ban_thuc_te"]:
+            if field in product:
+                product[field] = float(product[field]) if product[field] else 0
+
+    return products
+
+
 def check_branch_health(ma_chi_nhanh):
     branch = get_branch_by_id(ma_chi_nhanh)
     if not branch:

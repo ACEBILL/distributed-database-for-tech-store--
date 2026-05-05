@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from middleware.auth import require_auth
+from middleware.auth import require_auth, require_role
 from services.branch_service import (
     check_branch_health,
     create_branch,
@@ -63,7 +63,7 @@ def api_chi_nhanh_detail(ma_chi_nhanh):
 
 
 @branch_api_bp.route("/chi-nhanh", methods=["POST"])
-@require_auth
+@require_role("admin", "giam_doc")
 def api_create_chi_nhanh():
     """Tạo chi nhánh
     ---
@@ -94,7 +94,7 @@ def api_create_chi_nhanh():
 
 
 @branch_api_bp.route("/chi-nhanh/<ma_chi_nhanh>", methods=["PUT"])
-@require_auth
+@require_role("admin", "giam_doc")
 def api_update_chi_nhanh(ma_chi_nhanh):
     """Cập nhật chi nhánh
     ---
@@ -126,7 +126,7 @@ def api_update_chi_nhanh(ma_chi_nhanh):
 
 
 @branch_api_bp.route("/chi-nhanh/<ma_chi_nhanh>", methods=["DELETE"])
-@require_auth
+@require_role("admin", "giam_doc")
 def api_delete_chi_nhanh(ma_chi_nhanh):
     """Xóa chi nhánh
     ---

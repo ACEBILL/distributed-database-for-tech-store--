@@ -220,3 +220,51 @@ def soft_delete_employee(ma_nhan_vien):
         (ma_nhan_vien,),
     )
     return affected_rows > 0
+
+
+def get_employees_by_branch_for_api(ma_chi_nhanh):
+    """
+    Lấy danh sách nhân viên theo chi nhánh.
+    
+    Lưu ý: Schema hiện tại không có kết nối trực tiếp giữa nhân viên và chi nhánh.
+    Nhân viên được liên kết với phòng ban, nhưng phòng ban cũng không có chi nhánh.
+    Hàm này trả về tất cả nhân viên của hệ thống.
+    Để thực hiện thực sự theo chi nhánh, cần cập nhật schema.
+    """
+    # Kiểm tra chi nhánh tồn tại
+    from services.branch_service import get_branch_by_id
+    branch = get_branch_by_id(ma_chi_nhanh)
+    if not branch:
+        return []
+
+    # Hiện tại trả về tất cả nhân viên (không thể lọc theo chi nhánh)
+    employees = query_db(
+        EMPLOYEE_SELECT_SQL + " ORDER BY nv.ma_nhan_vien"
+    )
+    for employee in employees:
+        format_employee(employee)
+    
+    return employees
+
+
+def mask_sensitive_employee_fields(employee, is_admin=False):
+    """
+    Ẩn các trường nhạy cảm (cccd, sdt, luong) nếu người dùng không phải admin/giam_doc.
+    
+    Sensitive fields: cccd, sdt, luong
+    """
+    if not employee or is_admin:
+        return employee
+    
+    # Tạo bản sao để không thay đổi dữ liệu gốc
+    masked = dict(employee)
+    masked["cccd"] = None
+    masked["sdt"] = None
+    masked["luong"] = None
+    
+    return masked
+
+
+def mask_employees_list(employees, is_admin=False):
+    """Ẩn thông tin nhạy cảm cho danh sách nhân viên"""
+    return [mask_sensitive_employee_fields(emp, is_admin) for emp in employees]

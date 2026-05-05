@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from middleware.auth import require_auth
+from middleware.auth import require_auth, require_role
 from services.product_service import (
     create_product,
     get_product_by_id_for_api,
@@ -79,7 +79,7 @@ def api_san_pham_detail(ma_sp):
 
 
 @product_api_bp.route("/san-pham", methods=["POST"])
-@require_auth
+@require_role("admin", "giam_doc", "truong_phong")
 def api_create_san_pham():
     """Tạo sản phẩm
     ---
@@ -120,7 +120,7 @@ def api_create_san_pham():
 
 
 @product_api_bp.route("/san-pham/<ma_sp>", methods=["PUT"])
-@require_auth
+@require_role("admin", "giam_doc", "truong_phong")
 def api_update_san_pham(ma_sp):
     """Cập nhật sản phẩm
     ---
@@ -159,7 +159,7 @@ def api_update_san_pham(ma_sp):
 
 
 @product_api_bp.route("/san-pham/<ma_sp>", methods=["DELETE"])
-@require_auth
+@require_role("admin", "giam_doc", "truong_phong")
 def api_delete_san_pham(ma_sp):
     """Ngưng bán sản phẩm
     ---

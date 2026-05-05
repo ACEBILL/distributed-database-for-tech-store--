@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from middleware.auth import require_auth
+from middleware.auth import require_auth, require_role
 from services.category_service import (
     create_category,
     delete_category,
@@ -63,7 +63,7 @@ def api_loai_san_pham_detail(ma_loai_sp):
 
 
 @category_api_bp.route("/loai-san-pham", methods=["POST"])
-@require_auth
+@require_role("admin", "giam_doc", "truong_phong")
 def api_create_loai_san_pham():
     """Tạo loại sản phẩm
     ---
@@ -96,7 +96,7 @@ def api_create_loai_san_pham():
 
 
 @category_api_bp.route("/loai-san-pham/<ma_loai_sp>", methods=["PUT"])
-@require_auth
+@require_role("admin", "giam_doc", "truong_phong")
 def api_update_loai_san_pham(ma_loai_sp):
     """Cập nhật loại sản phẩm
     ---
@@ -129,7 +129,7 @@ def api_update_loai_san_pham(ma_loai_sp):
 
 
 @category_api_bp.route("/loai-san-pham/<ma_loai_sp>", methods=["DELETE"])
-@require_auth
+@require_role("admin", "giam_doc", "truong_phong")
 def api_delete_loai_san_pham(ma_loai_sp):
     """Xóa loại sản phẩm
     ---

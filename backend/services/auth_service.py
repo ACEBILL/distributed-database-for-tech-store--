@@ -15,7 +15,7 @@ def verify_credentials(ma_nhan_vien, mat_khau):
         SELECT ma_nhan_vien, ho_ten, chuc_vu, ma_phong_ban, trang_thai
         FROM NHAN_VIEN
         WHERE ma_nhan_vien = ?
-          AND mat_khau = CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', ?), 2)
+          AND mat_khau = CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', CAST(? AS VARCHAR(255))), 2)
         """,
         (ma_nhan_vien, mat_khau),
         fetchone=True,
