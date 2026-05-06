@@ -1,6 +1,7 @@
 import math
 import os
 
+import psycopg
 import pymysql
 import pyodbc
 import redis
@@ -24,7 +25,7 @@ def get_db_engine():
 
 
 def _normalize_sql(sql, engine):
-    if engine == "mysql":
+    if engine in {"mysql", "postgresql"}:
         return sql.replace("?", "%s")
     return sql
 
@@ -48,6 +49,8 @@ def password_hash_sql(engine=None):
     engine = normalize_db_engine(engine or get_db_engine())
     if engine == "mysql":
         return "UPPER(SHA2(?, 256))"
+    if engine == "postgresql":
+        return "UPPER(ENCODE(DIGEST(?, 'sha256'), 'hex'))"
     return "CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', CAST(? AS VARCHAR(255))), 2)"
 
 
@@ -86,6 +89,15 @@ def get_db_connection():
             password=current_app.config["DB_PASSWORD"],
             database=current_app.config["DB_NAME"],
             charset="utf8mb4",
+        )
+
+    if engine == "postgresql":
+        return psycopg.connect(
+            host=current_app.config["DB_HOST"],
+            port=int(current_app.config["DB_PORT"]),
+            user=current_app.config["DB_USER"],
+            password=current_app.config["DB_PASSWORD"],
+            dbname=current_app.config["DB_NAME"],
         )
 
     conn_str = (
@@ -204,7 +216,13 @@ def get_branch_db_connection(branch_code):
             charset="utf8mb4",
         )
     if settings["engine"] == "postgresql":
-        raise NotImplementedError("PostgreSQL branch connection is not implemented yet")
+        return psycopg.connect(
+            host=settings["host"],
+            port=int(settings["port"]),
+            user=settings["user"],
+            password=settings["password"],
+            dbname=settings["name"],
+        )
 
     conn_str = (
         "DRIVER={ODBC Driver 18 for SQL Server};"
