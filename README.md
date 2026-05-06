@@ -228,12 +228,12 @@ Các route dưới đây là roadmap dựa trên schema trong `init/mssql/01-sch
 DB trung tâm chỉ lưu mã và tên chi nhánh. Thông tin kết nối DB chi nhánh để trong `.env`.
 
 ```env
-BRANCH_CN01_DB_HOST=
-BRANCH_CN01_DB_ENGINE=sqlserver
-BRANCH_CN01_DB_PORT=1433
-BRANCH_CN01_DB_NAME=
-BRANCH_CN01_DB_USER=
-BRANCH_CN01_DB_PASSWORD=
+BRANCH_CN01_DB_HOST=mysql
+BRANCH_CN01_DB_ENGINE=mysql
+BRANCH_CN01_DB_PORT=3306
+BRANCH_CN01_DB_NAME=quan_ly_chi_nhanh
+BRANCH_CN01_DB_USER=techstore
+BRANCH_CN01_DB_PASSWORD=MyPass@2025
 
 BRANCH_CN02_DB_HOST=
 BRANCH_CN02_DB_ENGINE=sqlserver
