@@ -1,10 +1,13 @@
 from db import (
     build_pagination_meta,
+    execute_branch_db,
     execute_db,
+    get_branch_db_engine,
     now_sql,
     pagination_clause,
     parse_pagination,
     password_hash_sql,
+    query_branch_db,
     query_db,
 )
 
@@ -109,6 +112,16 @@ def get_employee_by_id_for_api(ma_nhan_vien):
     return format_employee(get_employee_by_id(ma_nhan_vien))
 
 
+def get_employee_by_id_from_branch_database_for_api(ma_chi_nhanh, ma_nhan_vien):
+    employee = query_branch_db(
+        ma_chi_nhanh,
+        EMPLOYEE_SELECT_SQL + " WHERE nv.ma_nhan_vien = ?",
+        (ma_nhan_vien,),
+        fetchone=True,
+    )
+    return format_employee(employee)
+
+
 def get_all_employees_for_api(args=None):
     args = args or {}
     where_sql, where_params = _build_employee_filters(args)
@@ -120,6 +133,12 @@ def get_all_employees_for_api(args=None):
         fetchone=True,
     )
     total = total_row["total"] if total_row else 0
+    if total > 0:
+        max_page = ((total - 1) // limit) + 1
+        page = min(page, max_page)
+    else:
+        page = 1
+    offset = (page - 1) * limit
 
     page_clause, page_params = pagination_clause("nv.ma_nhan_vien", offset, limit)
     employees = query_db(
@@ -151,13 +170,17 @@ def get_employees_by_department_id_for_api(ma_pb):
     return employees
 
 
-def create_employee(data):
+def _validate_create_employee(data):
     required_fields = ["ma_nhan_vien", "ho_ten", "mat_khau", "ma_phong_ban"]
     missing_fields = [field for field in required_fields if not data.get(field)]
     if missing_fields:
         raise ValueError("Missing required fields: " + ", ".join(missing_fields))
 
-    execute_db(
+
+def _create_employee_with_executor(executor, password_hash, data):
+    _validate_create_employee(data)
+
+    executor(
         """
         INSERT INTO NHAN_VIEN (
             ma_nhan_vien, ho_ten, cccd, sdt, luong, mat_khau, trang_thai,
@@ -168,7 +191,7 @@ def create_employee(data):
             {password_hash},
             ?, ?, ?, ?, ?, ?
         )
-        """.format(password_hash=password_hash_sql()),
+        """.format(password_hash=password_hash),
         (
             data["ma_nhan_vien"],
             data["ho_ten"],
@@ -185,10 +208,26 @@ def create_employee(data):
         ),
     )
 
+
+def create_employee(data):
+    _create_employee_with_executor(execute_db, password_hash_sql(), data)
     return get_employee_by_id_for_api(data["ma_nhan_vien"])
 
 
-def update_employee(ma_nhan_vien, data):
+def create_employee_in_branch(ma_chi_nhanh, data):
+    branch_engine = get_branch_db_engine(ma_chi_nhanh)
+    _create_employee_with_executor(
+        lambda sql, params=None: execute_branch_db(ma_chi_nhanh, sql, params),
+        password_hash_sql(branch_engine),
+        data,
+    )
+    return get_employee_by_id_from_branch_database_for_api(
+        ma_chi_nhanh,
+        data["ma_nhan_vien"],
+    )
+
+
+def _build_employee_update_assignments(data, password_hash):
     if not data:
         raise ValueError("Request body is required")
 
@@ -201,12 +240,20 @@ def update_employee(ma_nhan_vien, data):
             params.append(data[field])
 
     if "mat_khau" in data:
-        assignments.append(f"mat_khau = {password_hash_sql()}")
+        assignments.append(f"mat_khau = {password_hash}")
         params.append(data["mat_khau"])
 
     if not assignments:
         raise ValueError("No valid fields to update")
 
+    return assignments, params
+
+
+def update_employee(ma_nhan_vien, data):
+    assignments, params = _build_employee_update_assignments(
+        data,
+        password_hash_sql(),
+    )
     params.append(ma_nhan_vien)
     affected_rows = execute_db(
         f"UPDATE NHAN_VIEN SET {', '.join(assignments)} WHERE ma_nhan_vien = ?",
@@ -219,6 +266,25 @@ def update_employee(ma_nhan_vien, data):
     return get_employee_by_id_for_api(ma_nhan_vien)
 
 
+def update_employee_in_branch(ma_chi_nhanh, ma_nhan_vien, data):
+    branch_engine = get_branch_db_engine(ma_chi_nhanh)
+    assignments, params = _build_employee_update_assignments(
+        data,
+        password_hash_sql(branch_engine),
+    )
+    params.append(ma_nhan_vien)
+    affected_rows = execute_branch_db(
+        ma_chi_nhanh,
+        f"UPDATE NHAN_VIEN SET {', '.join(assignments)} WHERE ma_nhan_vien = ?",
+        tuple(params),
+    )
+
+    if affected_rows == 0:
+        return None
+
+    return get_employee_by_id_from_branch_database_for_api(ma_chi_nhanh, ma_nhan_vien)
+
+
 def soft_delete_employee(ma_nhan_vien):
     affected_rows = execute_db(
         """
@@ -226,6 +292,20 @@ def soft_delete_employee(ma_nhan_vien):
         SET trang_thai = 0, ngay_ket_thuc = COALESCE(ngay_ket_thuc, {now})
         WHERE ma_nhan_vien = ?
         """.format(now=now_sql()),
+        (ma_nhan_vien,),
+    )
+    return affected_rows > 0
+
+
+def soft_delete_employee_in_branch(ma_chi_nhanh, ma_nhan_vien):
+    branch_engine = get_branch_db_engine(ma_chi_nhanh)
+    affected_rows = execute_branch_db(
+        ma_chi_nhanh,
+        """
+        UPDATE NHAN_VIEN
+        SET trang_thai = 0, ngay_ket_thuc = COALESCE(ngay_ket_thuc, {now})
+        WHERE ma_nhan_vien = ?
+        """.format(now=now_sql(branch_engine)),
         (ma_nhan_vien,),
     )
     return affected_rows > 0
@@ -254,6 +334,48 @@ def get_employees_by_branch_for_api(ma_chi_nhanh):
         format_employee(employee)
     
     return employees
+
+
+def get_employees_from_branch_database_for_api(ma_chi_nhanh, args=None):
+    args = args or {}
+    where_sql, where_params = _build_employee_filters(args)
+    page, limit, offset = parse_pagination(args)
+    branch_engine = get_branch_db_engine(ma_chi_nhanh)
+
+    total_row = query_branch_db(
+        ma_chi_nhanh,
+        "SELECT COUNT(*) AS total " + EMPLOYEE_FROM_SQL + where_sql,
+        tuple(where_params),
+        fetchone=True,
+    )
+    total = total_row["total"] if total_row else 0
+    if total > 0:
+        max_page = ((total - 1) // limit) + 1
+        page = min(page, max_page)
+    else:
+        page = 1
+    offset = (page - 1) * limit
+
+    page_clause, page_params = pagination_clause(
+        "nv.ma_nhan_vien",
+        offset,
+        limit,
+        branch_engine,
+    )
+    employees = query_branch_db(
+        ma_chi_nhanh,
+        EMPLOYEE_SELECT_SQL + where_sql + page_clause,
+        tuple(where_params) + page_params,
+    )
+    for employee in employees:
+        format_employee(employee)
+
+    return {
+        "branch_code": ma_chi_nhanh.upper(),
+        "data": employees,
+        "pagination": build_pagination_meta(page, limit, total),
+        "source": "branch_database",
+    }
 
 
 def mask_sensitive_employee_fields(employee, is_admin=False):

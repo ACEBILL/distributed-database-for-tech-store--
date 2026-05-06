@@ -3,19 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản lý chi nhánh</title>
+    <title>Tech Store Portal</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <main id="loginView" class="login-shell">
+    <main id="portalPickerView" class="login-shell hidden">
+        <section class="portal-panel">
+            <div class="portal-copy">
+                <p class="eyebrow">Tech Store</p>
+                <h1>Chọn cổng làm việc</h1>
+                <p>Truy cập đúng portal để dữ liệu và quyền xem được tách theo trung tâm hoặc chi nhánh.</p>
+            </div>
+
+            <div class="portal-grid">
+                <a class="portal-card" href="/sqlserver">
+                    <span class="portal-kicker">SQL Server</span>
+                    <strong>Web trung tâm</strong>
+                    <p>Quản lý dữ liệu trung tâm và theo dõi nhanh tình trạng chi nhánh MySQL.</p>
+                    <span class="portal-meta">Toàn hệ thống</span>
+                </a>
+
+                <a class="portal-card" href="/mysql/cn01">
+                    <span class="portal-kicker">MySQL CN01</span>
+                    <strong>Web chi nhánh CN01</strong>
+                    <p>Chỉ hiển thị sản phẩm, nhân viên và trạng thái dữ liệu của riêng CN01.</p>
+                    <span class="portal-meta">Phạm vi chi nhánh</span>
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <main id="loginView" class="login-shell hidden">
         <section class="login-panel">
             <div class="login-copy">
-                <p class="eyebrow">Tech Store</p>
-                <h1>Đăng nhập quản lý chi nhánh</h1>
-                <p>Theo dõi sản phẩm, nhân viên và trạng thái dữ liệu chi nhánh.</p>
+                <p id="loginEyebrow" class="eyebrow">Tech Store</p>
+                <h1 id="loginTitle">Đăng nhập portal</h1>
+                <p id="loginDescription">Đăng nhập để tiếp tục.</p>
             </div>
 
             <form id="loginForm" class="login-form">
+                <div class="form-topbar">
+                    <span id="loginScopeTag" class="badge badge-muted">Portal</span>
+                    <a id="loginBackLink" class="inline-link" href="/">Đổi portal</a>
+                </div>
+
                 <label for="employeeCode">Mã nhân viên</label>
                 <input id="employeeCode" name="ma_nhan_vien" type="text" autocomplete="username" value="NV001" required>
 
@@ -34,7 +65,7 @@
                 <div class="brand-mark">TS</div>
                 <div>
                     <div class="brand-name">Tech Store</div>
-                    <div class="brand-subtitle">Quản trị chi nhánh</div>
+                    <div id="brandSubtitle" class="brand-subtitle">Portal dữ liệu</div>
                 </div>
             </div>
 
@@ -43,7 +74,7 @@
                     <span class="nav-icon">⌂</span>
                     <span>Tổng quan</span>
                 </button>
-                <button class="nav-item" type="button" data-view="branchesView">
+                <button class="nav-item" type="button" data-view="branchesView" data-central-only>
                     <span class="nav-icon">⌬</span>
                     <span>Chi nhánh</span>
                 </button>
@@ -55,10 +86,29 @@
                     <span class="nav-icon">◉</span>
                     <span>Nhân viên</span>
                 </button>
+                <div id="employeeSubmenu" class="nav-submenu" data-central-only>
+                    <button
+                        id="employeeCentralNav"
+                        class="nav-subitem active"
+                        type="button"
+                        data-employee-source="central"
+                    >
+                        Nhân viên trụ sở
+                    </button>
+                    <button
+                        id="employeeBranchNav"
+                        class="nav-subitem"
+                        type="button"
+                        data-employee-source="branch"
+                    >
+                        Nhân viên chi nhánh
+                    </button>
+                </div>
             </nav>
 
             <div class="sidebar-footer">
                 <div id="sidebarUser" class="sidebar-user">Đang đăng nhập</div>
+                <a id="sidebarPortalLink" class="btn btn-ghost link-btn" href="/">Đổi portal</a>
                 <button id="logoutBtn" class="btn btn-ghost" type="button">Đăng xuất</button>
             </div>
         </aside>
@@ -69,24 +119,30 @@
                     <div id="pageTitle" class="app-title">Tổng quan</div>
                     <div id="userLabel" class="app-subtitle">Đang đăng nhập</div>
                 </div>
-                <button id="refreshBtn" class="btn" type="button">Tải lại</button>
+
+                <div class="topbar-actions">
+                    <a id="companionPortalLink" class="btn link-btn" href="/">Đổi portal</a>
+                    <button id="refreshBtn" class="btn" type="button">Tải lại</button>
+                </div>
             </header>
 
             <main class="layout">
                 <section id="overviewView" class="view-panel active">
                     <div class="summary-grid">
-                        <button class="metric metric-link" type="button" data-view="productsView">
+                        <button class="metric metric-link" type="button" data-shortcut-view="productsView">
                             <span class="metric-label">Sản phẩm</span>
                             <strong id="productCount">...</strong>
                         </button>
-                        <button class="metric metric-link" type="button" data-view="employeesView">
+
+                        <button class="metric metric-link" type="button" data-shortcut-view="employeesView">
                             <span class="metric-label">Nhân viên</span>
                             <strong id="employeeCount">...</strong>
                         </button>
-                        <button class="metric metric-link" type="button" data-view="branchesView">
-                            <span class="metric-label">Chi nhánh</span>
-                            <strong id="branchCount">...</strong>
-                        </button>
+
+                        <div class="metric">
+                            <span id="contextMetricLabel" class="metric-label">Phạm vi</span>
+                            <strong id="contextMetricValue">...</strong>
+                        </div>
                     </div>
 
                     <section class="section">
@@ -96,16 +152,37 @@
                         </div>
                         <div class="quick-grid">
                             <div class="quick-item">
+                                <span>Portal hiện tại</span>
+                                <strong id="overviewScope">...</strong>
+                            </div>
+                            <div class="quick-item">
                                 <span>Nguồn sản phẩm</span>
                                 <strong id="overviewProductSource">...</strong>
                             </div>
                             <div class="quick-item">
-                                <span>Hệ CSDL chính</span>
-                                <strong>MySQL</strong>
+                                <span>CSDL chính</span>
+                                <strong id="overviewDbEngine">...</strong>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="secondaryInsightSection" class="section">
+                        <div class="section-header">
+                            <h1 id="secondaryInsightTitle">Theo dõi chi nhánh</h1>
+                            <span class="status" id="secondaryInsightStatus">Đang tải</span>
+                        </div>
+                        <div class="quick-grid">
+                            <div class="quick-item">
+                                <span id="secondaryLabel1">Trạng thái</span>
+                                <strong id="secondaryValue1">...</strong>
                             </div>
                             <div class="quick-item">
-                                <span>Cache</span>
-                                <strong>Redis</strong>
+                                <span id="secondaryLabel2">Dữ liệu</span>
+                                <strong id="secondaryValue2">...</strong>
+                            </div>
+                            <div class="quick-item">
+                                <span id="secondaryLabel3">Portal liên quan</span>
+                                <strong><a id="secondaryLink" class="inline-link" href="/">Mở portal</a></strong>
                             </div>
                         </div>
                     </section>
@@ -134,6 +211,21 @@
                 </section>
 
                 <section id="productsView" class="view-panel">
+                    <section id="productSourcePanel" class="section source-panel">
+                        <div class="section-header">
+                            <h1>Nguồn dữ liệu sản phẩm</h1>
+                            <span class="status" id="branchDbStatus">DB chính</span>
+                        </div>
+                        <div class="source-actions">
+                            <button class="source-btn active" type="button" data-product-source="main">
+                                DB chính - SQL Server
+                            </button>
+                            <button class="source-btn" type="button" data-product-source="CN01">
+                                CN01 - MySQL
+                            </button>
+                        </div>
+                    </section>
+
                     <section class="section">
                         <div class="section-header">
                             <h1>Sản phẩm</h1>
@@ -158,6 +250,82 @@
                 </section>
 
                 <section id="employeesView" class="view-panel">
+                    <section id="employeeManageSection" class="section hidden">
+                        <div class="section-header">
+                            <h1 id="employeeFormTitle">Quản lý nhân viên</h1>
+                            <div class="topbar-actions">
+                                <button id="employeeNewBtn" class="btn" type="button">Thêm mới</button>
+                                <button id="employeeCancelBtn" class="btn hidden" type="button">Hủy</button>
+                            </div>
+                        </div>
+
+                        <form id="employeeForm" class="employee-form">
+                            <div class="form-grid">
+                                <label class="field">
+                                    <span>Mã nhân viên</span>
+                                    <input id="employeeFormCode" name="ma_nhan_vien" type="text" required>
+                                </label>
+                                <label class="field">
+                                    <span>Họ tên</span>
+                                    <input id="employeeFormName" name="ho_ten" type="text" required>
+                                </label>
+                                <label class="field">
+                                    <span>Mật khẩu</span>
+                                    <input id="employeeFormPassword" name="mat_khau" type="password" placeholder="Bắt buộc khi thêm mới">
+                                </label>
+                                <label class="field">
+                                    <span>Phòng ban</span>
+                                    <input id="employeeFormDepartment" name="ma_phong_ban" type="number" min="1" required>
+                                </label>
+                                <label class="field">
+                                    <span>Chức vụ</span>
+                                    <select id="employeeFormRole" name="chuc_vu">
+                                        <option value="nhan_vien">Nhân viên</option>
+                                        <option value="pho_phong">Phó phòng</option>
+                                        <option value="truong_phong">Trưởng phòng</option>
+                                        <option value="giam_doc">Giám đốc</option>
+                                    </select>
+                                </label>
+                                <label class="field">
+                                    <span>Lương</span>
+                                    <input id="employeeFormSalary" name="luong" type="number" min="0" step="1000">
+                                </label>
+                                <label class="field">
+                                    <span>Số điện thoại</span>
+                                    <input id="employeeFormPhone" name="sdt" type="text">
+                                </label>
+                                <label class="field">
+                                    <span>CCCD</span>
+                                    <input id="employeeFormCccd" name="cccd" type="text">
+                                </label>
+                                <label class="field">
+                                    <span>Số ngày làm</span>
+                                    <input id="employeeFormDays" name="ma_ngay_lam" type="number" min="0" step="1">
+                                </label>
+                                <label class="field">
+                                    <span>Trạng thái</span>
+                                    <select id="employeeFormStatus" name="trang_thai">
+                                        <option value="1">Đang làm</option>
+                                        <option value="0">Đã nghỉ</option>
+                                    </select>
+                                </label>
+                                <label class="field">
+                                    <span>Ngày bắt đầu</span>
+                                    <input id="employeeFormStartDate" name="ngay_bat_dau" type="date">
+                                </label>
+                                <label class="field">
+                                    <span>Ngày kết thúc</span>
+                                    <input id="employeeFormEndDate" name="ngay_ket_thuc" type="date">
+                                </label>
+                            </div>
+
+                            <div class="stack-actions">
+                                <button id="employeeSubmitBtn" class="btn btn-primary compact-btn" type="submit">Lưu nhân viên</button>
+                                <div id="employeeFormError" class="form-error compact-error" role="alert"></div>
+                            </div>
+                        </form>
+                    </section>
+
                     <section class="section">
                         <div class="section-header">
                             <h1>Nhân viên</h1>
@@ -173,10 +341,18 @@
                                         <th>Chức vụ</th>
                                         <th class="right">Lương</th>
                                         <th>Trạng thái</th>
+                                        <th id="employeeActionHead" class="right hidden">Thao tác</th>
                                     </tr>
                                 </thead>
                                 <tbody id="employeeRows"></tbody>
                             </table>
+                        </div>
+                        <div id="employeePagination" class="pagination-bar">
+                            <span id="employeePageInfo" class="pagination-info">Trang 1 / 1</span>
+                            <div class="pagination-actions">
+                                <button id="employeePrevBtn" class="btn" type="button">Trang trước</button>
+                                <button id="employeeNextBtn" class="btn" type="button">Trang sau</button>
+                            </div>
                         </div>
                     </section>
                 </section>

@@ -274,3 +274,115 @@ Reset database hoàn toàn:
 docker compose down -v
 docker compose up -d --build
 ```
+
+## Cap nhat bo sung cho ban demo hien tai
+
+Luu y: muc nay la phan bo sung cho README goc, khong xoa va khong thay the noi dung cu. Khi can xem nhanh kien truc va cach chay ban demo hien tai, uu tien tham khao muc nay.
+
+### Kien truc demo hien tai
+
+```text
+Frontend / Portal
+   |
+   v
+Backend Flask API / Middleware
+   |
+   +-- DB chinh: SQL Server
+   +-- CN01: MySQL
+   `-- CN02: PostgreSQL (placeholder, chua trien khai)
+```
+
+- SQL Server dang duoc dung lam DB trung tam.
+- MySQL dang duoc dung lam DB chi nhanh `CN01`.
+- `CN02` hien de danh cho PostgreSQL nhung chua co service va chua co portal hoan chinh.
+- Redis van dung cho cache.
+
+### Portal hien co
+
+| Portal | URL | Pham vi |
+|---|---|---|
+| Cong portal | http://localhost:3000/ | Chon web trung tam hoac web chi nhanh |
+| Web tru so | http://localhost:3000/sqlserver | Dang nhap bang tai khoan o SQL Server trung tam |
+| Web chi nhanh CN01 | http://localhost:3000/mysql/cn01 | Dang nhap bang tai khoan o MySQL CN01 |
+
+### Dich vu dang chay trong ban demo
+
+| Service | URL / Host | Ghi chu |
+|---|---|---|
+| Frontend | http://localhost:3000 | Portal chon web, web tru so, web CN01 |
+| Backend API | http://localhost:5000 | Flask API / middleware |
+| Swagger UI | http://localhost:5000/apidocs | Tai lieu API |
+| SQL Server trung tam | localhost,1433 | DB chinh |
+| MySQL CN01 | localhost:3306 | DB chi nhanh |
+| Redis | localhost:6379 | Cache |
+
+### Dang nhap va phan quyen hien tai
+
+- Web tru so dung `POST /api/auth/login`.
+- Web CN01 dung `POST /api/auth/branches/CN01/login`.
+- Token trung tam co `scope=central`.
+- Token chi nhanh co `scope=branch` va `branch_code=CN01`.
+
+Tai khoan mau dang dung de test:
+
+```text
+NV001 / pass123
+```
+
+### Hanh vi nhan vien theo tung web
+
+#### Web tru so (`/sqlserver`)
+
+- Co submenu `Nhan vien tru so` va `Nhan vien chi nhanh`.
+- `Nhan vien tru so`:
+  - xem duoc
+  - them duoc
+  - sua duoc
+- `Nhan vien chi nhanh`:
+  - chi xem du lieu tu `CN01`
+  - khong co form them/sua/xoa
+- Token tru so khong duoc `DELETE /api/nhan-vien/<ma_nhan_vien>`.
+
+#### Web chi nhanh CN01 (`/mysql/cn01`)
+
+- Chi xem du lieu cua chinh chi nhanh `CN01`.
+- Co the:
+  - xem nhan vien
+  - them nhan vien
+  - sua nhan vien
+  - ngung nhan vien (xoa mem)
+
+### API branch / middleware dang dung
+
+| Endpoint | Y nghia |
+|---|---|
+| `GET /api/chi-nhanh/CN01/health` | Kiem tra ket noi DB CN01 |
+| `GET /api/chi-nhanh/CN01/san-pham` | Lay san pham tu MySQL CN01 |
+| `GET /api/chi-nhanh/CN01/nhan-vien` | Lay nhan vien tu MySQL CN01 |
+
+Ghi chu:
+
+- `GET /api/nhan-vien` se tu doc theo portal dang dang nhap:
+  - token trung tam -> SQL Server trung tam
+  - token chi nhanh -> DB chi nhanh tuong ung
+- `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` hien huu ich nhat cho portal tru so khi can xem du lieu chi nhanh.
+
+### Phan trang nhan vien
+
+- Ca web tru so va web chi nhanh deu da co phan trang cho danh sach nhan vien.
+- Moi trang hien thi `10` nhan vien.
+- Frontend co nut `Trang truoc` va `Trang sau`.
+- Backend da ho tro query string:
+
+```text
+/api/nhan-vien?page=1&limit=10
+/api/chi-nhanh/CN01/nhan-vien?page=1&limit=10
+```
+
+- Neu yeu cau trang lon hon so trang hien co, backend se tu dua ve trang hop le cuoi cung.
+
+### Ghi chu ve du lieu
+
+- Schema hien tai chua gan truc tiep nhan vien voi ma chi nhanh trong DB trung tam.
+- Vi vay phan `Nhan vien chi nhanh` o portal tru so dang doc truc tiep tu DB chi nhanh qua middleware, thay vi suy luan tu schema SQL Server trung tam.
+- Du lieu nhan vien trung tam va chi nhanh hien co the khac nhau ve so luong.

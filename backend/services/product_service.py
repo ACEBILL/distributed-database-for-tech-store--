@@ -3,9 +3,11 @@ import json
 from db import (
     build_pagination_meta,
     execute_db,
+    get_branch_db_engine,
     now_sql,
     pagination_clause,
     parse_pagination,
+    query_branch_db,
     query_db,
 )
 from services.cache_service import delete_cache, get_cache, set_cache
@@ -207,6 +209,55 @@ def get_products_by_branch_for_api(ma_chi_nhanh=None):
     for product in products:
         format_product(product)
     return products
+
+
+def get_products_from_branch_database_for_api(ma_chi_nhanh):
+    branch = query_db(
+        """
+        SELECT ma_chi_nhanh, ten_chi_nhanh
+        FROM chi_nhanh
+        WHERE ma_chi_nhanh = ?
+        """,
+        (ma_chi_nhanh,),
+        fetchone=True,
+    )
+    if not branch:
+        return None
+
+    products = query_branch_db(
+        ma_chi_nhanh,
+        """
+        SELECT
+            cn.ma_chi_nhanh,
+            cn.ten_chi_nhanh,
+            sp.ma_sp,
+            sp.ten_sp,
+            sp.gia,
+            sp.ti_le_loi_nhuan,
+            sp.ti_le_giam_gia,
+            ROUND(sp.gia * (1 + sp.ti_le_loi_nhuan / 100) * (1 - sp.ti_le_giam_gia / 100), 0) AS gia_ban_thuc_te,
+            sp.trang_thai,
+            lsp.ten_loai_sp,
+            ncc.ten_NCC
+        FROM SAN_PHAM sp
+        JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
+        JOIN chi_nhanh cn ON lsp.ma_chi_nhanh = cn.ma_chi_nhanh
+        JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
+        WHERE cn.ma_chi_nhanh = ?
+        ORDER BY sp.ma_sp
+        """,
+        (ma_chi_nhanh,),
+    )
+    for product in products:
+        format_product(product)
+
+    return {
+        "branch": branch,
+        "engine": get_branch_db_engine(ma_chi_nhanh),
+        "source": "branch_database",
+        "data": products,
+        "pagination": build_pagination_meta(1, len(products) or 1, len(products)),
+    }
 
 
 def _is_default_request(args):

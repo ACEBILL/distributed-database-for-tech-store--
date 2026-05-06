@@ -1,6 +1,6 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
-from middleware.auth import require_auth, require_role
+from middleware.auth import require_auth, require_branch_access, require_role
 from services.branch_service import (
     check_branch_health,
     create_branch,
@@ -15,6 +15,7 @@ branch_api_bp = Blueprint("branch_api", __name__, url_prefix="/api")
 
 
 @branch_api_bp.route("/chi-nhanh")
+@require_auth
 def api_chi_nhanh_list():
     """Lấy danh sách chi nhánh
     ---
@@ -35,10 +36,17 @@ def api_chi_nhanh_list():
       200:
         description: Danh sách chi nhánh + pagination
     """
+    if g.current_user.get("scope") == "branch":
+        branch = get_branch_by_id(g.current_user["branch_code"])
+        if not branch:
+            return jsonify({"data": [], "pagination": {"page": 1, "limit": 50, "total": 0}})
+        return jsonify({"data": [branch], "pagination": {"page": 1, "limit": 50, "total": 1}})
+
     return jsonify(get_branches_for_api(request.args))
 
 
 @branch_api_bp.route("/chi-nhanh/<ma_chi_nhanh>")
+@require_branch_access
 def api_chi_nhanh_detail(ma_chi_nhanh):
     """Lấy chi tiết chi nhánh
     ---
@@ -152,6 +160,7 @@ def api_delete_chi_nhanh(ma_chi_nhanh):
 
 
 @branch_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/health")
+@require_branch_access
 def api_chi_nhanh_health(ma_chi_nhanh):
     """Kiểm tra kết nối tới DB của chi nhánh
     ---

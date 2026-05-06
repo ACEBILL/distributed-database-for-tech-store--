@@ -2,8 +2,6 @@ services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sqlserver
-    profiles:
-      - sqlserver
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
@@ -26,8 +24,6 @@ services:
   mssql-init:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: mssql-init
-    profiles:
-      - sqlserver
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -85,10 +81,10 @@ services:
     environment:
       FLASK_ENV: development
       FLASK_DEBUG: "1"
-      DB_ENGINE: ${DB_ENGINE:-mysql}
-      DB_HOST: ${DB_HOST:-mysql}
-      DB_PORT: ${DB_PORT:-3306}
-      DB_USER: ${DB_USER:-techstore}
+      DB_ENGINE: ${DB_ENGINE:-sqlserver}
+      DB_HOST: ${DB_HOST:-sqlserver}
+      DB_PORT: ${DB_PORT:-1433}
+      DB_USER: ${DB_USER:-sa}
       DB_PASSWORD: ${DB_PASSWORD:-MyPass@2025}
       DB_NAME: ${DB_NAME:-quan_ly_chi_nhanh}
       REDIS_HOST: ${REDIS_HOST:-redis}
@@ -100,8 +96,8 @@ services:
       BRANCH_CN01_DB_USER: ${BRANCH_CN01_DB_USER:-}
       BRANCH_CN01_DB_PASSWORD: ${BRANCH_CN01_DB_PASSWORD:-}
       BRANCH_CN02_DB_HOST: ${BRANCH_CN02_DB_HOST:-}
-      BRANCH_CN02_DB_ENGINE: ${BRANCH_CN02_DB_ENGINE:-mysql}
-      BRANCH_CN02_DB_PORT: ${BRANCH_CN02_DB_PORT:-3306}
+      BRANCH_CN02_DB_ENGINE: ${BRANCH_CN02_DB_ENGINE:-postgresql}
+      BRANCH_CN02_DB_PORT: ${BRANCH_CN02_DB_PORT:-5432}
       BRANCH_CN02_DB_NAME: ${BRANCH_CN02_DB_NAME:-}
       BRANCH_CN02_DB_USER: ${BRANCH_CN02_DB_USER:-}
       BRANCH_CN02_DB_PASSWORD: ${BRANCH_CN02_DB_PASSWORD:-}
@@ -110,6 +106,8 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
+      mssql-init:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       redis:

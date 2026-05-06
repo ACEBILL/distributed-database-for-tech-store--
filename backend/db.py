@@ -9,7 +9,7 @@ from flask import current_app
 
 DEFAULT_PAGE_LIMIT = 50
 MAX_PAGE_LIMIT = 200
-SUPPORTED_DB_ENGINES = {"sqlserver", "mysql"}
+SUPPORTED_DB_ENGINES = {"sqlserver", "mysql", "postgresql"}
 
 
 def normalize_db_engine(engine):
@@ -31,7 +31,7 @@ def _normalize_sql(sql, engine):
 
 def pagination_clause(order_by, offset, limit, engine=None):
     engine = normalize_db_engine(engine or get_db_engine())
-    if engine == "mysql":
+    if engine in {"mysql", "postgresql"}:
         return f" ORDER BY {order_by} LIMIT ? OFFSET ?", (limit, offset)
     return f" ORDER BY {order_by} OFFSET ? ROWS FETCH NEXT ? ROWS ONLY", (
         offset,
@@ -41,14 +41,14 @@ def pagination_clause(order_by, offset, limit, engine=None):
 
 def now_sql(engine=None):
     engine = normalize_db_engine(engine or get_db_engine())
-    return "NOW()" if engine == "mysql" else "GETDATE()"
+    return "NOW()" if engine in {"mysql", "postgresql"} else "GETDATE()"
 
 
 def password_hash_sql(engine=None):
     engine = normalize_db_engine(engine or get_db_engine())
     if engine == "mysql":
         return "UPPER(SHA2(?, 256))"
-    return "CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', ?), 2)"
+    return "CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', CAST(? AS VARCHAR(255))), 2)"
 
 
 def parse_pagination(args, default_limit=DEFAULT_PAGE_LIMIT, max_limit=MAX_PAGE_LIMIT):
@@ -153,7 +153,7 @@ def get_branch_db_settings(branch_code):
     normalized_code = branch_code.upper().replace("-", "_")
     prefix = f"BRANCH_{normalized_code}_DB_"
     engine = get_branch_db_engine(branch_code)
-    default_port = "3306" if engine == "mysql" else "1433"
+    default_port = {"mysql": "3306", "postgresql": "5432"}.get(engine, "1433")
 
     settings = {
         "engine": engine,
@@ -203,6 +203,8 @@ def get_branch_db_connection(branch_code):
             database=settings["name"],
             charset="utf8mb4",
         )
+    if settings["engine"] == "postgresql":
+        raise NotImplementedError("PostgreSQL branch connection is not implemented yet")
 
     conn_str = (
         "DRIVER={ODBC Driver 18 for SQL Server};"
@@ -229,6 +231,19 @@ def query_branch_db(branch_code, sql, params=None, fetchone=False):
             return dict(zip(columns, row)) if row else None
 
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def execute_branch_db(branch_code, sql, params=None):
+    engine = get_branch_db_engine(branch_code)
+    conn = get_branch_db_connection(branch_code)
+    try:
+        cursor = conn.cursor()
+        sql = _normalize_sql(sql, engine)
+        cursor.execute(sql, params or [])
+        conn.commit()
+        return cursor.rowcount
     finally:
         conn.close()
 

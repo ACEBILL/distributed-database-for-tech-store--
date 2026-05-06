@@ -1,5 +1,6 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, g, jsonify
 
+from middleware.auth import require_auth, require_branch_access
 from services.branch_service import (
     get_branch_analysis_for_api,
     get_branch_stats_for_api,
@@ -13,6 +14,7 @@ stats_api_bp = Blueprint("stats_api", __name__, url_prefix="/api")
 
 
 @stats_api_bp.route("/thong-ke")
+@require_auth
 def api_thong_ke():
     """
     Lấy danh sách chi nhánh và trạng thái cấu hình DB chi nhánh
@@ -42,10 +44,15 @@ def api_thong_ke():
                   data:
                     nullable: true
     """
-    return jsonify(get_branch_stats_for_api())
+    stats = get_branch_stats_for_api()
+    if g.current_user.get("scope") == "branch":
+        branch_code = (g.current_user.get("branch_code") or "").upper()
+        stats = [item for item in stats if item["ma_chi_nhanh"].upper() == branch_code]
+    return jsonify(stats)
 
 
 @stats_api_bp.route("/thong-ke/chi-nhanh")
+@require_auth
 def api_thong_ke_chi_nhanh():
     """Lấy thống kê chi nhánh
     ---
@@ -55,10 +62,13 @@ def api_thong_ke_chi_nhanh():
       200:
         description: Dữ liệu từ view v_thong_ke_chi_nhanh
     """
+    if g.current_user.get("scope") != "central":
+        return jsonify({"error": "Central access required"}), 403
     return jsonify(get_branch_analysis_for_api())
 
 
 @stats_api_bp.route("/thong-ke/luong-phong-ban")
+@require_auth
 def api_thong_ke_luong_phong_ban():
     """Lấy thống kê lương theo phòng ban
     ---
@@ -68,10 +78,13 @@ def api_thong_ke_luong_phong_ban():
       200:
         description: Dữ liệu từ view v_luong_phong_ban
     """
+    if g.current_user.get("scope") != "central":
+        return jsonify({"error": "Central access required"}), 403
     return jsonify(get_salary_stats_by_department_for_api())
 
 
 @stats_api_bp.route("/thong-ke/san-pham-theo-chi-nhanh/<ma_chi_nhanh>")
+@require_branch_access
 def api_thong_ke_san_pham_theo_chi_nhanh(ma_chi_nhanh):
     """Lấy thống kê sản phẩm theo chi nhánh
     ---
@@ -92,6 +105,7 @@ def api_thong_ke_san_pham_theo_chi_nhanh(ma_chi_nhanh):
 
 
 @stats_api_bp.route("/thong-ke/nhan-vien-theo-chi-nhanh/<ma_chi_nhanh>")
+@require_branch_access
 def api_thong_ke_nhan_vien_theo_chi_nhanh(ma_chi_nhanh):
     """Lấy danh sách nhân viên theo chi nhánh
     ---
