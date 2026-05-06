@@ -386,3 +386,111 @@ Ghi chu:
 - Schema hien tai chua gan truc tiep nhan vien voi ma chi nhanh trong DB trung tam.
 - Vi vay phan `Nhan vien chi nhanh` o portal tru so dang doc truc tiep tu DB chi nhanh qua middleware, thay vi suy luan tu schema SQL Server trung tam.
 - Du lieu nhan vien trung tam va chi nhanh hien co the khac nhau ve so luong.
+
+---
+
+## Known Issues and Errors (From Test Case Analysis)
+
+This section documents issues discovered during comprehensive testing (68 test cases created).
+
+### Issue 1: JWT Token Verification Issues
+- **Component:** Backend API Authentication (`middleware/auth.py`, `services/auth_service.py`)
+- **Impact:** Token verification may fail during testing and in some scenarios
+- **Affected Endpoints:** All protected endpoints requiring authentication
+- **Details:** Refer to [backend/README.md#known-issues](backend/README.md#known-issues-and-errors-from-testing)
+
+### Issue 2: Branch Database Configuration Not Set Up
+- **Component:** Backend Configuration (`config.py`, `.env.example`)
+- **Impact:** CN01 (MySQL) and CN02 (PostgreSQL) are not accessible without proper .env configuration
+- **Affected Endpoints:**
+  - `POST /api/auth/branches/CN01/login` (TC005)
+  - `GET /api/chi-nhanh/CN01/san-pham` (TC019)
+  - `GET /api/chi-nhanh/CN01/nhan-vien` (TC034-TC035)
+- **Details:** See [backend/README.md#issue-2-branch-database-configuration-not-set-up](backend/README.md#issue-2-branch-database-configuration-not-set-up)
+
+### Issue 3: Redis Cache Connection Issues
+- **Component:** Cache Service (`services/cache_service.py`)
+- **Impact:** Product list caching may fail if Redis is not properly running
+- **Affected Functionality:** Product list cache (TC022)
+- **Details:** See [backend/README.md#issue-3-redis-cache-connection-issues](backend/README.md#issue-3-redis-cache-connection-issues)
+
+### Issue 4: Role-Based Access Control
+- **Component:** Backend API Authorization (`middleware/auth.py`, all API files)
+- **Impact:** Create/Update/Delete operations require proper role tokens
+- **Affected Test Cases:** TC013, TC029, TC040, TC052, TC057
+- **Details:** See [backend/README.md#issue-4-role-based-access-control-not-fully-tested](backend/README.md#issue-4-role-based-access-control-not-fully-tested)
+
+### Issue 5: Pagination Edge Cases
+- **Component:** Employee Service (`services/employee_service.py`, `db.py`)
+- **Impact:** Invalid page numbers or limits may not be handled gracefully
+- **Affected Endpoints:** `GET /api/nhan-vien?page=X&limit=Y` (TC025)
+- **Details:** See [backend/README.md#issue-5-pagination-edge-cases](backend/README.md#issue-5-pagination-edge-cases)
+
+### Issue 6: Multi-Database Support Incomplete
+- **Component:** Database Connection (`db.py`, `services/auth_service.py`)
+- **Impact:** PostgreSQL driver is not implemented for CN02
+- **Affected Functionality:** CN02 branch database operations
+- **Details:** See [backend/README.md#issue-6-multi-database-support-incomplete](backend/README.md#issue-6-multi-database-support-incomplete)
+
+### Issue 7: Sensitive Field Masking
+- **Component:** Employee Service (`services/employee_service.py`)
+- **Impact:** Sensitive fields may not be consistently masked for non-admin users
+- **Affected Endpoints:** Employee list and detail endpoints (TC028, TC024)
+- **Details:** See [backend/README.md#issue-7-sensitive-field-masking-inconsistencies](backend/README.md#issue-7-sensitive-field-masking-inconsistencies)
+
+### Issue 8: Soft Delete Verification
+- **Component:** Employee & Product Services
+- **Impact:** Deleted records may still appear in some queries
+- **Affected Operations:** DELETE endpoints for employees, products, departments (TC016, TC032, TC042, TC049)
+- **Details:** See [backend/README.md#issue-8-soft-delete-verification](backend/README.md#issue-8-soft-delete-verification)
+
+### Issue 9: Missing Field Validation
+- **Component:** All API Endpoints
+- **Impact:** Some endpoints may not properly validate required fields in requests
+- **Affected Test Cases:** TC003, TC014, TC030
+- **Details:** See [backend/README.md#issue-9-error-handling-for-missing-required-fields](backend/README.md#issue-9-error-handling-for-missing-required-fields)
+
+### Issue 10: Database Connection Pooling
+- **Component:** Database Layer (`db.py`, `config.py`)
+- **Impact:** Connection pooling may fail under concurrent requests
+- **Affected Scenarios:** Load testing, concurrent test execution
+- **Details:** See [backend/README.md#issue-10-database-connection-pooling-under-load](backend/README.md#issue-10-database-connection-pooling-under-load)
+
+---
+
+## Test Case Documentation
+
+Complete test case documentation has been created:
+
+1. **TEST_CASES.md** - Detailed markdown file with all 68 test cases
+2. **TEST_CASES.docx** - Formatted Word document for easy distribution and printing
+3. **backend/tests/** - Pytest test files organized by API module:
+   - `conftest.py` - Test configuration and fixtures
+   - `test_auth_api.py` - Authentication tests (TC001-TC008)
+   - `test_product_api.py` - Product API tests (TC009-TC022)
+   - `test_employee_api.py` - Employee API tests (TC023-TC036)
+   - `test_other_api.py` - Branch, Department, Category, Supplier tests (TC037-TC059)
+   - `test_stats_api.py` - Statistics API tests (TC060-TC068)
+
+### Running the Test Suite
+
+```bash
+# Install test dependencies
+pip install pytest pytest-cov
+
+# Run all tests
+pytest backend/tests/ -v
+
+# Run specific test class
+pytest backend/tests/test_auth_api.py::TestAuthAPI -v
+
+# Generate coverage report
+pytest backend/tests/ --cov=backend --cov-report=html
+```
+
+### Test Execution Notes
+
+- **Total Test Cases:** 68
+- **Coverage Areas:** Authentication, CRUD operations, Authorization, Pagination, Caching, Multi-database support
+- **Dependencies:** Flask, pytest, python-docx, Docker (for services)
+- **Execution Time:** Approximately 5-10 minutes (depending on configuration)
