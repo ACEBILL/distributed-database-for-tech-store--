@@ -61,6 +61,28 @@ services:
       retries: 20
       start_period: 30s
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-quan_ly_chi_nhanh}
+      POSTGRES_USER: ${POSTGRES_USER:-techstore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-MyPass@2025}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init/postgres:/docker-entrypoint-initdb.d
+    networks:
+      - db-cluster
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-techstore} -d ${POSTGRES_DB:-quan_ly_chi_nhanh}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
   redis:
     image: redis:7-alpine
     container_name: redis-cache
@@ -95,12 +117,12 @@ services:
       BRANCH_CN01_DB_NAME: ${BRANCH_CN01_DB_NAME:-quan_ly_chi_nhanh}
       BRANCH_CN01_DB_USER: ${BRANCH_CN01_DB_USER:-techstore}
       BRANCH_CN01_DB_PASSWORD: ${BRANCH_CN01_DB_PASSWORD:-MyPass@2025}
-      BRANCH_CN02_DB_HOST: ${BRANCH_CN02_DB_HOST:-}
+      BRANCH_CN02_DB_HOST: ${BRANCH_CN02_DB_HOST:-postgres}
       BRANCH_CN02_DB_ENGINE: ${BRANCH_CN02_DB_ENGINE:-postgresql}
       BRANCH_CN02_DB_PORT: ${BRANCH_CN02_DB_PORT:-5432}
-      BRANCH_CN02_DB_NAME: ${BRANCH_CN02_DB_NAME:-}
-      BRANCH_CN02_DB_USER: ${BRANCH_CN02_DB_USER:-}
-      BRANCH_CN02_DB_PASSWORD: ${BRANCH_CN02_DB_PASSWORD:-}
+      BRANCH_CN02_DB_NAME: ${BRANCH_CN02_DB_NAME:-quan_ly_chi_nhanh}
+      BRANCH_CN02_DB_USER: ${BRANCH_CN02_DB_USER:-techstore}
+      BRANCH_CN02_DB_PASSWORD: ${BRANCH_CN02_DB_PASSWORD:-MyPass@2025}
     ports:
       - "${FLASK_PORT:-5000}:5000"
     volumes:
@@ -109,6 +131,8 @@ services:
       mssql-init:
         condition: service_completed_successfully
       mysql:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
       redis:
         condition: service_started
@@ -131,6 +155,7 @@ services:
 volumes:
   mssql-data:
   mysql-data:
+  postgres-data:
   redis-data:
 
 networks:

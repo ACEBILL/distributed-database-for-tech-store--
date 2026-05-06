@@ -39,6 +39,8 @@ docker compose up -d --build
 | Backend API | http://localhost:5000 | Flask API |
 | Swagger UI | http://localhost:5000/apidocs | Tài liệu API |
 | SQL Server | localhost,1433 | `sa` / `MyPass@2025` mặc định |
+| MySQL CN01 | localhost:3306 | `techstore` / `MyPass@2025`, DB `quan_ly_chi_nhanh` |
+| PostgreSQL CN02 | localhost:5432 | `techstore` / `MyPass@2025`, DB `quan_ly_chi_nhanh` |
 | Redis | localhost:6379 | Cache |
 
 ## API endpoints
@@ -187,8 +189,14 @@ Các route dưới đây là roadmap dựa trên schema trong `init/mssql/01-sch
 ```text
 ├── docker-compose.yml
 ├── .env.example
-├── init/mssql/
-│   └── 01-schema-and-data.sql
+├── init/
+│   ├── mssql/
+│   │   └── 01-schema-and-data.sql
+│   ├── mysql/
+│   │   ├── 01-schema-and-data.sql
+│   │   └── 02-update-vietnamese-data.sql
+│   └── postgres/
+│       └── 01-schema-and-data.sql
 ├── backend/
     ├── Dockerfile
     ├── requirements.txt
@@ -235,12 +243,12 @@ BRANCH_CN01_DB_NAME=quan_ly_chi_nhanh
 BRANCH_CN01_DB_USER=techstore
 BRANCH_CN01_DB_PASSWORD=MyPass@2025
 
-BRANCH_CN02_DB_HOST=
-BRANCH_CN02_DB_ENGINE=sqlserver
-BRANCH_CN02_DB_PORT=1433
-BRANCH_CN02_DB_NAME=
-BRANCH_CN02_DB_USER=
-BRANCH_CN02_DB_PASSWORD=
+BRANCH_CN02_DB_HOST=postgres
+BRANCH_CN02_DB_ENGINE=postgresql
+BRANCH_CN02_DB_PORT=5432
+BRANCH_CN02_DB_NAME=quan_ly_chi_nhanh
+BRANCH_CN02_DB_USER=techstore
+BRANCH_CN02_DB_PASSWORD=MyPass@2025
 ```
 
 `BRANCH_CNxx_DB_ENGINE` dùng để frontend/API biết chi nhánh đó dùng hệ CSDL nào. Giá trị dự kiến:
@@ -251,7 +259,7 @@ postgresql
 mysql
 ```
 
-Hiện backend mới có driver kết nối SQL Server. Nếu một chi nhánh dùng PostgreSQL hoặc MySQL, cần cài thêm driver Python và viết thêm hàm kết nối tương ứng trước khi query dữ liệu thật.
+Backend hiện đã hỗ trợ cả ba driver: `pyodbc` (SQL Server), `pymysql` (MySQL) và `psycopg` (PostgreSQL). Stack mặc định khi `docker compose up` đã bật cả ba DB.
 
 Nếu chưa cấu hình DB chi nhánh, `/api/thong-ke` vẫn trả tên chi nhánh nhưng `trang_thai_ket_noi` là `not_configured`.
 
@@ -266,6 +274,8 @@ docker compose ps
 docker compose logs -f frontend
 docker compose logs -f backend
 docker compose logs -f sqlserver
+docker compose logs -f mysql
+docker compose logs -f postgres
 ```
 
 Reset database hoàn toàn:
@@ -289,12 +299,12 @@ Backend Flask API / Middleware
    |
    +-- DB chinh: SQL Server
    +-- CN01: MySQL
-   `-- CN02: PostgreSQL (placeholder, chua trien khai)
+   `-- CN02: PostgreSQL
 ```
 
 - SQL Server dang duoc dung lam DB trung tam.
 - MySQL dang duoc dung lam DB chi nhanh `CN01`.
-- `CN02` hien de danh cho PostgreSQL nhung chua co service va chua co portal hoan chinh.
+- PostgreSQL dang duoc dung lam DB chi nhanh `CN02`.
 - Redis van dung cho cache.
 
 ### Portal hien co
@@ -304,6 +314,7 @@ Backend Flask API / Middleware
 | Cong portal | http://localhost:3000/ | Chon web trung tam hoac web chi nhanh |
 | Web tru so | http://localhost:3000/sqlserver | Dang nhap bang tai khoan o SQL Server trung tam |
 | Web chi nhanh CN01 | http://localhost:3000/mysql/cn01 | Dang nhap bang tai khoan o MySQL CN01 |
+| Web chi nhanh CN02 | http://localhost:3000/postgresql/cn02 | Dang nhap bang tai khoan o PostgreSQL CN02 |
 
 ### Dich vu dang chay trong ban demo
 
@@ -314,6 +325,7 @@ Backend Flask API / Middleware
 | Swagger UI | http://localhost:5000/apidocs | Tai lieu API |
 | SQL Server trung tam | localhost,1433 | DB chinh |
 | MySQL CN01 | localhost:3306 | DB chi nhanh |
+| PostgreSQL CN02 | localhost:5432 | DB chi nhanh |
 | Redis | localhost:6379 | Cache |
 
 ### Dang nhap va phan quyen hien tai

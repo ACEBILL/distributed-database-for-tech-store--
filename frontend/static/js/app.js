@@ -42,6 +42,28 @@ const PORTALS = {
         secondaryLinkText: "Mở web SQL Server",
         allowedViews: ["overviewView", "productsView", "employeesView"],
     },
+    cn02: {
+        key: "cn02",
+        aliases: ["/postgresql/cn02", "/chi-nhanh/cn02"],
+        branchCode: "CN02",
+        portalLabel: "Web chi nhánh CN02",
+        portalBadge: "PostgreSQL chi nhánh",
+        loginTitle: "Đăng nhập web chi nhánh CN02",
+        loginDescription: "Chỉ hiển thị sản phẩm, nhân viên và trạng thái dữ liệu của riêng CN02.",
+        brandSubtitle: "Portal chi nhánh CN02",
+        loginEndpoint: "/api/auth/branches/CN02/login",
+        defaultView: "overviewView",
+        defaultProductSource: "branch",
+        mainDbLabel: "PostgreSQL CN02",
+        overviewScopeLabel: "Chi nhánh CN02",
+        companionLabel: "Mở web SQL Server",
+        companionHref: "/sqlserver",
+        secondaryTitle: "Kết nối chi nhánh",
+        secondaryLabels: ["Trạng thái PostgreSQL", "Phạm vi dữ liệu", "Portal trung tâm"],
+        secondaryLinkHref: "/sqlserver",
+        secondaryLinkText: "Mở web SQL Server",
+        allowedViews: ["overviewView", "productsView", "employeesView"],
+    },
 };
 
 const pageTitles = {
