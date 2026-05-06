@@ -73,7 +73,8 @@ const pageTitles = {
     employeesView: "Nhân viên",
 };
 
-const BRANCH_EMPLOYEE_SOURCE_CODE = "CN01";
+const SUPPORTED_BRANCH_CODES = ["CN01", "CN02"];
+let selectedBranchSourceCode = "CN01";
 const EMPLOYEE_PAGE_LIMIT = 10;
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
@@ -99,6 +100,11 @@ const productSourceButtons = Array.from(
 const employeeSourceButtons = Array.from(
     document.querySelectorAll("[data-employee-source]")
 );
+const employeeBranchPickerButtons = Array.from(
+    document.querySelectorAll("[data-employee-branch]")
+);
+const employeeBranchPicker = document.getElementById("employeeBranchPicker");
+const employeeBranchStatus = document.getElementById("employeeBranchStatus");
 
 const productSourcePanel = document.getElementById("productSourcePanel");
 const companionPortalLink = document.getElementById("companionPortalLink");
@@ -129,7 +135,9 @@ let employeeEditingCode = null;
 let employeePageState = {
     central: 1,
     branch_CN01: 1,
+    branch_CN02: 1,
     cn01: 1,
+    cn02: 1,
 };
 
 function normalizePath(pathname) {
@@ -304,7 +312,6 @@ function canManageEmployees() {
     }
 
     return (
-        activePortal.key === "cn01" &&
         currentUser.scope === "branch" &&
         ["admin", "giam_doc", "truong_phong"].includes(currentUser.chuc_vu)
     );
@@ -348,7 +355,7 @@ function getEmployeeStatusLabel(total) {
     }
 
     if (isViewingBranchEmployeesFromHeadquarter()) {
-        return `${BRANCH_EMPLOYEE_SOURCE_CODE} - ${total} nhân viên`;
+        return `${selectedBranchSourceCode} - ${total} nhân viên`;
     }
 
     return `${total} nhân viên`;
@@ -363,6 +370,23 @@ function syncEmployeeSourceButtons() {
     });
 }
 
+function syncEmployeeBranchPicker() {
+    if (!employeeBranchPicker) {
+        return;
+    }
+    const visible = isViewingBranchEmployeesFromHeadquarter();
+    employeeBranchPicker.classList.toggle("hidden", !visible);
+    employeeBranchPickerButtons.forEach((button) => {
+        button.classList.toggle(
+            "active",
+            button.dataset.employeeBranch === selectedBranchSourceCode
+        );
+    });
+    if (employeeBranchStatus) {
+        employeeBranchStatus.textContent = selectedBranchSourceCode;
+    }
+}
+
 function getEmployeePaginationKey() {
     if (!activePortal) {
         return "central";
@@ -371,7 +395,7 @@ function getEmployeePaginationKey() {
     if (activePortal.key === "central") {
         return selectedEmployeeSource === "central" ?
             "central" :
-            `branch_${BRANCH_EMPLOYEE_SOURCE_CODE}`;
+            `branch_${selectedBranchSourceCode}`;
     }
 
     return activePortal.key;
@@ -390,13 +414,21 @@ function setEmployeeCurrentPage(page) {
 function resetEmployeePagination() {
     employeePageState = {
         central: 1,
-        branch_CN01: 1,
         cn01: 1,
+        cn02: 1,
     };
+    SUPPORTED_BRANCH_CODES.forEach((code) => {
+        employeePageState[`branch_${code}`] = 1;
+    });
 }
 
 function canDisableEmployees() {
-    return activePortal && activePortal.key === "cn01" && canManageEmployees();
+    return (
+        activePortal &&
+        currentUser &&
+        currentUser.scope === "branch" &&
+        canManageEmployees()
+    );
 }
 
 function getEmployeeColumnCount() {
@@ -418,6 +450,7 @@ function switchView(viewId) {
         "pageTitle",
         viewId === "employeesView" ? getEmployeePageTitle() : pageTitles[viewId]
     );
+    syncEmployeeBranchPicker();
 }
 
 function showPortalPicker() {
@@ -483,9 +516,11 @@ function configurePortalUI() {
     productSourcePanel.hidden = activePortal.key !== "central";
     selectedProductSource = activePortal.defaultProductSource;
     selectedEmployeeSource = activePortal.key === "central" ? "central" : "branch";
+    selectedBranchSourceCode = activePortal.branchCode || "CN01";
     resetEmployeePagination();
     syncProductSourceButtons();
     syncEmployeeSourceButtons();
+    syncEmployeeBranchPicker();
     resetEmployeeForm();
     toggleEmployeeManagementVisibility();
     switchView(activePortal.defaultView);
@@ -707,7 +742,7 @@ async function fetchEmployeesForActivePortal() {
     const query = getEmployeePaginationParams();
     if (isViewingBranchEmployeesFromHeadquarter()) {
         return fetchJson(
-            `/api/chi-nhanh/${BRANCH_EMPLOYEE_SOURCE_CODE}/nhan-vien?${query}`
+            `/api/chi-nhanh/${selectedBranchSourceCode}/nhan-vien?${query}`
         );
     }
 
@@ -885,13 +920,14 @@ function renderApiError(message) {
 }
 
 async function loadCentralData() {
+    const insightBranch = selectedBranchSourceCode || "CN01";
     const [branches, products, employees, branchHealth, branchProducts] =
         await Promise.all([
             fetchJson("/api/thong-ke"),
             fetchProductsForActivePortal(),
             fetchEmployeesForActivePortal(),
-            fetchJson("/api/chi-nhanh/CN01/health"),
-            fetchJson("/api/chi-nhanh/CN01/san-pham"),
+            fetchJson(`/api/chi-nhanh/${insightBranch}/health`),
+            fetchJson(`/api/chi-nhanh/${insightBranch}/san-pham`),
         ]);
 
     renderBranches(branches);
@@ -1007,7 +1043,7 @@ async function handleEmployeeRowClick(event) {
             return;
         }
         const confirmed = window.confirm(
-            `Ngưng nhân viên ${employeeId} trong chi nhánh CN01?`
+            `Ngưng nhân viên ${employeeId} trong chi nhánh ${activePortal.branchCode}?`
         );
         if (!confirmed) {
             return;
@@ -1143,8 +1179,25 @@ employeeSourceButtons.forEach((button) => {
 
         selectedEmployeeSource = button.dataset.employeeSource || "central";
         syncEmployeeSourceButtons();
+        syncEmployeeBranchPicker();
         resetEmployeeForm();
         toggleEmployeeManagementVisibility();
+        switchView("employeesView");
+        await loadData();
+    });
+});
+
+employeeBranchPickerButtons.forEach((button) => {
+    button.addEventListener("click", async () => {
+        if (activePortal.key !== "central") {
+            return;
+        }
+        const code = button.dataset.employeeBranch;
+        if (!code || code === selectedBranchSourceCode) {
+            return;
+        }
+        selectedBranchSourceCode = code;
+        syncEmployeeBranchPicker();
         switchView("employeesView");
         await loadData();
     });

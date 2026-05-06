@@ -351,13 +351,13 @@ NV001 / pass123
   - them duoc
   - sua duoc
 - `Nhan vien chi nhanh`:
-  - chi xem du lieu tu `CN01`
-  - khong co form them/sua/xoa
+  - co the chuyen doi giua `CN01` (MySQL) va `CN02` (PostgreSQL) bang nut chon chi nhanh
+  - chi xem du lieu, khong co form them/sua/xoa
 - Token tru so khong duoc `DELETE /api/nhan-vien/<ma_nhan_vien>`.
 
-#### Web chi nhanh CN01 (`/mysql/cn01`)
+#### Web chi nhanh CN01 (`/mysql/cn01`) va CN02 (`/postgresql/cn02`)
 
-- Chi xem du lieu cua chinh chi nhanh `CN01`.
+- Chi xem du lieu cua chinh chi nhanh `CN01` hoac `CN02`.
 - Co the:
   - xem nhan vien
   - them nhan vien
@@ -368,9 +368,9 @@ NV001 / pass123
 
 | Endpoint | Y nghia |
 |---|---|
-| `GET /api/chi-nhanh/CN01/health` | Kiem tra ket noi DB CN01 |
-| `GET /api/chi-nhanh/CN01/san-pham` | Lay san pham tu MySQL CN01 |
-| `GET /api/chi-nhanh/CN01/nhan-vien` | Lay nhan vien tu MySQL CN01 |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/health` | Kiem tra ket noi DB chi nhanh (CN01 / CN02) |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/san-pham` | Lay san pham tu DB chi nhanh |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` | Lay nhan vien tu DB chi nhanh |
 
 Ghi chu:
 
