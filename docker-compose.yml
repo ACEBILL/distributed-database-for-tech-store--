@@ -94,13 +94,14 @@ services:
     networks:
       - db-cluster
 
-  backend:
+  tru-so-backend:
     build:
-      context: ./backend
+      context: ./tru_so/backend
       dockerfile: Dockerfile
-    container_name: backend-api
+    container_name: tru-so-backend
     restart: unless-stopped
     environment:
+      APP_ROLE: central
       FLASK_ENV: development
       FLASK_DEBUG: "1"
       DB_ENGINE: ${DB_ENGINE:-sqlserver}
@@ -111,6 +112,9 @@ services:
       DB_NAME: ${DB_NAME:-quan_ly_chi_nhanh}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
+      SERVICE_API_URL: ${TRU_SO_SERVICE_URL:-http://tru-so-service:5000}
+      BRANCH_CN01_API_URL: ${BRANCH_CN01_API_URL:-http://mysql-backend:5000}
+      BRANCH_CN02_API_URL: ${BRANCH_CN02_API_URL:-http://postgre-backend:5000}
       BRANCH_CN01_DB_HOST: ${BRANCH_CN01_DB_HOST:-mysql}
       BRANCH_CN01_DB_ENGINE: ${BRANCH_CN01_DB_ENGINE:-mysql}
       BRANCH_CN01_DB_PORT: ${BRANCH_CN01_DB_PORT:-3306}
@@ -124,9 +128,9 @@ services:
       BRANCH_CN02_DB_USER: ${BRANCH_CN02_DB_USER:-techstore}
       BRANCH_CN02_DB_PASSWORD: ${BRANCH_CN02_DB_PASSWORD:-MyPass@2025}
     ports:
-      - "${FLASK_PORT:-5000}:5000"
+      - "${CENTRAL_API_PORT:-5000}:5000"
     volumes:
-      - ./backend:/app
+      - ./tru_so/backend:/app
     depends_on:
       mssql-init:
         condition: service_completed_successfully
@@ -139,16 +143,161 @@ services:
     networks:
       - db-cluster
 
-  frontend:
+  mysql-backend:
     build:
-      context: ./frontend
+      context: ./mysql/backend
       dockerfile: Dockerfile
-    container_name: frontend-client
+    container_name: mysql-backend
+    restart: unless-stopped
+    environment:
+      APP_ROLE: branch
+      BRANCH_CODE: CN01
+      FLASK_ENV: development
+      FLASK_DEBUG: "1"
+      DB_ENGINE: ${BRANCH_CN01_DB_ENGINE:-mysql}
+      DB_HOST: ${BRANCH_CN01_DB_HOST:-mysql}
+      DB_PORT: ${BRANCH_CN01_DB_PORT:-3306}
+      DB_NAME: ${BRANCH_CN01_DB_NAME:-quan_ly_chi_nhanh}
+      DB_USER: ${BRANCH_CN01_DB_USER:-techstore}
+      DB_PASSWORD: ${BRANCH_CN01_DB_PASSWORD:-MyPass@2025}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+    ports:
+      - "${CN01_API_PORT:-5001}:5000"
+    volumes:
+      - ./mysql/backend:/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - db-cluster
+
+  postgre-backend:
+    build:
+      context: ./postgre/backend
+      dockerfile: Dockerfile
+    container_name: postgre-backend
+    restart: unless-stopped
+    environment:
+      APP_ROLE: branch
+      BRANCH_CODE: CN02
+      FLASK_ENV: development
+      FLASK_DEBUG: "1"
+      DB_ENGINE: ${BRANCH_CN02_DB_ENGINE:-postgresql}
+      DB_HOST: ${BRANCH_CN02_DB_HOST:-postgres}
+      DB_PORT: ${BRANCH_CN02_DB_PORT:-5432}
+      DB_NAME: ${BRANCH_CN02_DB_NAME:-quan_ly_chi_nhanh}
+      DB_USER: ${BRANCH_CN02_DB_USER:-techstore}
+      DB_PASSWORD: ${BRANCH_CN02_DB_PASSWORD:-MyPass@2025}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+    ports:
+      - "${CN02_API_PORT:-5002}:5000"
+    volumes:
+      - ./postgre/backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - db-cluster
+
+  tru-so-service:
+    build:
+      context: ./tru_so/service
+      dockerfile: Dockerfile
+    container_name: tru-so-service
+    restart: unless-stopped
+    environment:
+      SYSTEM_NAME: tru_so
+      BACKEND_API_URL: http://tru-so-backend:5000
+      PEER_SERVICE_URLS: mysql=http://mysql-service:5000,postgre=http://postgre-service:5000
+    ports:
+      - "${TRU_SO_SERVICE_PORT:-5010}:5000"
+    depends_on:
+      - tru-so-backend
+    networks:
+      - db-cluster
+
+  mysql-service:
+    build:
+      context: ./mysql/service
+      dockerfile: Dockerfile
+    container_name: mysql-service
+    restart: unless-stopped
+    environment:
+      SYSTEM_NAME: mysql
+      BACKEND_API_URL: http://mysql-backend:5000
+      PEER_SERVICE_URLS: tru_so=http://tru-so-service:5000,postgre=http://postgre-service:5000
+    ports:
+      - "${MYSQL_SERVICE_PORT:-5011}:5000"
+    depends_on:
+      - mysql-backend
+    networks:
+      - db-cluster
+
+  postgre-service:
+    build:
+      context: ./postgre/service
+      dockerfile: Dockerfile
+    container_name: postgre-service
+    restart: unless-stopped
+    environment:
+      SYSTEM_NAME: postgre
+      BACKEND_API_URL: http://postgre-backend:5000
+      PEER_SERVICE_URLS: tru_so=http://tru-so-service:5000,mysql=http://mysql-service:5000
+    ports:
+      - "${POSTGRE_SERVICE_PORT:-5012}:5000"
+    depends_on:
+      - postgre-backend
+    networks:
+      - db-cluster
+
+  tru-so-frontend:
+    build:
+      context: ./tru_so/frontend
+      dockerfile: Dockerfile
+      args:
+        API_UPSTREAM: http://tru-so-backend:5000
+    container_name: tru-so-frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "${CENTRAL_FRONTEND_PORT:-3000}:80"
     depends_on:
-      - backend
+      - tru-so-backend
+    networks:
+      - db-cluster
+
+  mysql-frontend:
+    build:
+      context: ./mysql/frontend
+      dockerfile: Dockerfile
+      args:
+        API_UPSTREAM: http://mysql-backend:5000
+    container_name: mysql-frontend
+    restart: unless-stopped
+    ports:
+      - "${CN01_FRONTEND_PORT:-3001}:80"
+    depends_on:
+      - mysql-backend
+    networks:
+      - db-cluster
+
+  postgre-frontend:
+    build:
+      context: ./postgre/frontend
+      dockerfile: Dockerfile
+      args:
+        API_UPSTREAM: http://postgre-backend:5000
+    container_name: postgre-frontend
+    restart: unless-stopped
+    ports:
+      - "${CN02_FRONTEND_PORT:-3002}:80"
+    depends_on:
+      - postgre-backend
     networks:
       - db-cluster
 
