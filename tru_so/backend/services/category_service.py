@@ -1,8 +1,10 @@
 from db import (
     build_pagination_meta,
     execute_db,
+    get_branch_db_engine,
     pagination_clause,
     parse_pagination,
+    query_branch_db,
     query_db,
 )
 
@@ -62,6 +64,56 @@ def get_category_by_id_for_api(ma_loai_sp):
         (ma_loai_sp,),
         fetchone=True,
     )
+
+
+def get_categories_from_branch_database_for_api(ma_chi_nhanh, args=None):
+    branch = query_db(
+        """
+        SELECT ma_chi_nhanh, ten_chi_nhanh
+        FROM chi_nhanh
+        WHERE ma_chi_nhanh = ?
+        """,
+        (ma_chi_nhanh,),
+        fetchone=True,
+    )
+    if not branch:
+        return None
+
+    args = args or {}
+    filters = {"ma_chi_nhanh": ma_chi_nhanh}
+    for key in ["keyword", "page", "limit"]:
+        if args.get(key) not in (None, ""):
+            filters[key] = args.get(key)
+
+    where_sql, where_params = _build_category_filters(filters)
+    page, limit, offset = parse_pagination(filters)
+
+    total_row = query_branch_db(
+        ma_chi_nhanh,
+        "SELECT COUNT(*) AS total FROM loai_sp" + where_sql,
+        tuple(where_params),
+        fetchone=True,
+    )
+    total = total_row["total"] if total_row else 0
+
+    page_clause, page_params = pagination_clause(
+        "ma_loai_sp", offset, limit, engine=get_branch_db_engine(ma_chi_nhanh)
+    )
+    categories = query_branch_db(
+        ma_chi_nhanh,
+        "SELECT ma_loai_sp, ten_loai_sp, ma_chi_nhanh FROM loai_sp"
+        + where_sql
+        + page_clause,
+        tuple(where_params) + page_params,
+    )
+
+    return {
+        "branch": branch,
+        "engine": get_branch_db_engine(ma_chi_nhanh),
+        "source": "branch_database",
+        "data": categories,
+        "pagination": build_pagination_meta(page, limit, total),
+    }
 
 
 def create_category(data):

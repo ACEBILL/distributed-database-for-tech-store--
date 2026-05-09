@@ -1,10 +1,11 @@
 from flask import Blueprint, jsonify, request
 
-from middleware.auth import require_auth, require_role
+from middleware.auth import require_auth, require_branch_access, require_role
 from services.category_service import (
     create_category,
     delete_category,
     get_all_categories_for_api,
+    get_categories_from_branch_database_for_api,
     get_category_by_id_for_api,
     update_category,
 )
@@ -62,6 +63,41 @@ def api_loai_san_pham_detail(ma_loai_sp):
     if not category:
         return jsonify({"error": "Category not found"}), 404
     return jsonify(category)
+
+
+@category_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/loai-san-pham")
+@require_branch_access
+def api_loai_san_pham_from_branch_database(ma_chi_nhanh):
+    """Đọc loại sản phẩm trực tiếp từ DB chi nhánh
+    ---
+    tags:
+      - Loại sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_chi_nhanh
+        in: path
+        required: true
+        schema: {type: string}
+      - name: keyword
+        in: query
+        schema: {type: string}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50, maximum: 200}
+    responses:
+      200:
+        description: Loại sản phẩm đọc từ DB chi nhánh
+      404:
+        description: Không tìm thấy chi nhánh
+    """
+    payload = get_categories_from_branch_database_for_api(ma_chi_nhanh, request.args)
+    if payload is None:
+        return jsonify({"error": "Branch not found"}), 404
+    return jsonify(payload)
 
 
 @category_api_bp.route("/loai-san-pham", methods=["POST"])

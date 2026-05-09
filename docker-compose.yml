@@ -116,6 +116,8 @@ services:
       SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-service-token-change-in-production}
       BRANCH_CN01_API_URL: ${BRANCH_CN01_API_URL:-http://mysql-backend:5000}
       BRANCH_CN02_API_URL: ${BRANCH_CN02_API_URL:-http://postgre-backend:5000}
+      BRANCH_CN01_SERVICE_URL: ${BRANCH_CN01_SERVICE_URL:-http://mysql-service:5000}
+      BRANCH_CN02_SERVICE_URL: ${BRANCH_CN02_SERVICE_URL:-http://postgre-service:5000}
       BRANCH_CN01_DB_HOST: ${BRANCH_CN01_DB_HOST:-mysql}
       BRANCH_CN01_DB_ENGINE: ${BRANCH_CN01_DB_ENGINE:-mysql}
       BRANCH_CN01_DB_PORT: ${BRANCH_CN01_DB_PORT:-3306}

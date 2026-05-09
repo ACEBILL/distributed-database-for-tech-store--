@@ -1,6 +1,6 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
-from middleware.auth import require_auth, require_role
+from middleware.auth import require_auth, require_branch_access, require_role
 from services.category_service import (
     create_category,
     delete_category,
@@ -11,6 +11,10 @@ from services.category_service import (
 
 
 category_api_bp = Blueprint("category_api", __name__, url_prefix="/api")
+
+
+def _branch_code():
+    return (current_app.config.get("BRANCH_CODE") or "").upper()
 
 
 @category_api_bp.route("/loai-san-pham")
@@ -60,6 +64,43 @@ def api_loai_san_pham_detail(ma_loai_sp):
     if not category:
         return jsonify({"error": "Category not found"}), 404
     return jsonify(category)
+
+
+@category_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/loai-san-pham")
+@require_branch_access
+def api_loai_san_pham_by_branch(ma_chi_nhanh):
+    """Danh sách loại sản phẩm theo namespace chi nhánh
+    ---
+    tags:
+      - Loại sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_chi_nhanh
+        in: path
+        required: true
+        schema: {type: string}
+      - name: keyword
+        in: query
+        schema: {type: string}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50, maximum: 200}
+    responses:
+      200:
+        description: Danh sách loại sản phẩm của chi nhánh
+      403:
+        description: Backend này không phục vụ chi nhánh được yêu cầu
+    """
+    if ma_chi_nhanh.upper() != _branch_code():
+        return jsonify({"error": "This API only serves its configured branch"}), 403
+
+    args = request.args.to_dict()
+    args["ma_chi_nhanh"] = ma_chi_nhanh
+    return jsonify(get_all_categories_for_api(args))
 
 
 @category_api_bp.route("/loai-san-pham", methods=["POST"])

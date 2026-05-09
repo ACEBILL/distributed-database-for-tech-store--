@@ -87,6 +87,8 @@ Base URL thường dùng:
 - `GET /api/san-pham` hỗ trợ query string: `keyword`, `ma_loai_sp`, `ma_ncc`, `trang_thai`, `gia_min`, `gia_max`, `page`, `limit`.
 - `GET /api/nhan-vien` và `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` hỗ trợ query string: `keyword`, `chuc_vu`, `trang_thai`, `ma_phong_ban`, `page`, `limit`.
 - `GET /api/san-pham/sync-events` hỗ trợ query string: `status`, `target_branch`, `ma_sp`, `event_type`.
+- `POST /api/san-pham/sync-events/<event_id>/retry` retry một event đồng bộ; `POST /api/san-pham/sync-events/retry-failed` retry hàng loạt event lỗi/chờ xử lý.
+- `GET /api/system/health` tổng hợp health của trụ sở, service chi nhánh, DB chi nhánh, pending events và `last_sync_version`.
 - Các thao tác ghi trên sản phẩm, loại sản phẩm, nhà cung cấp, nhân viên, chi nhánh và phòng ban đã được giới hạn theo vai trò.
 - Redis đang cache danh sách sản phẩm bằng key `cache:san_pham_list`.
 - Nhánh dữ liệu thống kê theo chi nhánh hiện có hai mã mẫu là `CN01` và `CN02`.
@@ -114,11 +116,14 @@ Base URL thường dùng:
 | `DELETE /api/san-pham/<ma_sp>` | Ngưng bán sản phẩm |
 | `GET /api/san-pham/sync-events` | Xem event đồng bộ sản phẩm đã tạo ở trụ sở |
 | `GET /api/san-pham/sync-events?ma_sp=<ma_sp>&status=<status>` | Lọc event đồng bộ theo sản phẩm/trạng thái |
+| `POST /api/san-pham/sync-events/<event_id>/retry` | Retry một event đồng bộ sản phẩm |
+| `POST /api/san-pham/sync-events/retry-failed` | Retry hàng loạt event đồng bộ đang `pending`, `failed` hoặc tùy chọn `dead_letter` |
 | `GET /api/san-pham-theo-chi-nhanh` | Sản phẩm theo chi nhánh |
 | `GET /api/san-pham/chi-nhanh/<ma_chi_nhanh>` | Sản phẩm theo mã chi nhánh |
 | `GET /api/san-pham/loai/<ma_loai_sp>` | Sản phẩm theo mã loại sản phẩm |
 | `GET /api/san-pham/ncc/<ma_ncc>` | Sản phẩm theo mã nhà cung cấp |
 | `GET /api/chi-nhanh/<ma_chi_nhanh>/san-pham` | Đọc sản phẩm trực tiếp từ DB chi nhánh qua middleware trung tâm |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/loai-san-pham` | Đọc loại sản phẩm trực tiếp từ DB chi nhánh qua middleware trung tâm |
 | `GET /api/nhan-vien` | Danh sách nhân viên |
 | `GET /api/nhan-vien?keyword=<tu_khoa>` | Tìm nhân viên theo tên, mã, CCCD hoặc SĐT |
 | `GET /api/nhan-vien?chuc_vu=<chuc_vu>&trang_thai=1&ma_phong_ban=<ma_pb>` | Lọc nhân viên theo chức vụ, trạng thái, phòng ban |
@@ -141,6 +146,7 @@ Base URL thường dùng:
 | `PUT /api/chi-nhanh/<ma_chi_nhanh>` | Cập nhật chi nhánh |
 | `DELETE /api/chi-nhanh/<ma_chi_nhanh>` | Xóa chi nhánh |
 | `GET /api/chi-nhanh/<ma_chi_nhanh>/health` | Kiểm tra cấu hình/kết nối DB chi nhánh |
+| `GET /api/system/health` | Health tổng hợp toàn hệ thống phân tán |
 | `GET /api/loai-san-pham` | Danh sách loại sản phẩm |
 | `GET /api/loai-san-pham/<ma_loai_sp>` | Chi tiết loại sản phẩm |
 | `POST /api/loai-san-pham` | Tạo loại sản phẩm |
@@ -170,6 +176,8 @@ Các endpoint này là alias rõ nghĩa cho dữ liệu trụ sở trên `http:/
 | `PUT /api/tru-so/san-pham/<ma_sp>` | Cập nhật sản phẩm ở trụ sở |
 | `DELETE /api/tru-so/san-pham/<ma_sp>` | Ngưng bán sản phẩm ở trụ sở |
 | `GET /api/tru-so/san-pham/sync-events` | Xem event đồng bộ sản phẩm phát sinh từ trụ sở |
+| `POST /api/tru-so/san-pham/sync-events/<event_id>/retry` | Retry một event đồng bộ sản phẩm phát sinh từ trụ sở |
+| `POST /api/tru-so/san-pham/sync-events/retry-failed` | Retry hàng loạt event đồng bộ lỗi/chờ xử lý |
 | `GET /api/tru-so/nhan-vien` | Danh sách nhân viên trụ sở |
 | `GET /api/tru-so/nhan-vien/<ma_nhan_vien>` | Chi tiết nhân viên trụ sở |
 | `POST /api/tru-so/nhan-vien` | Tạo nhân viên trụ sở |
@@ -186,6 +194,7 @@ Các endpoint này là alias rõ nghĩa cho dữ liệu trụ sở trên `http:/
 | `GET /api/tru-so/thong-ke` | Thống kê/metadata chi nhánh nhìn từ trụ sở |
 | `GET /api/tru-so/thong-ke/chi-nhanh` | Thống kê chi nhánh từ view trung tâm |
 | `GET /api/tru-so/thong-ke/luong-phong-ban` | Thống kê lương phòng ban từ view trung tâm |
+| `GET /api/tru-so/system/health` | Health tổng hợp toàn hệ thống phân tán |
 
 ### API backend chi nhánh trực tiếp
 
@@ -215,6 +224,7 @@ Các route `/api/internal/products/...` là API nội bộ cho service, cần he
 | `PUT /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>` | Cập nhật nhân viên theo namespace chi nhánh |
 | `DELETE /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>` | Xóa mềm/ngưng nhân viên theo namespace chi nhánh |
 | `GET /api/loai-san-pham` | Danh sách loại sản phẩm ở DB chi nhánh |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/loai-san-pham` | Danh sách loại sản phẩm theo namespace chi nhánh |
 | `GET /api/loai-san-pham/<ma_loai_sp>` | Chi tiết loại sản phẩm |
 | `POST /api/loai-san-pham` | Tạo loại sản phẩm |
 | `PUT /api/loai-san-pham/<ma_loai_sp>` | Cập nhật loại sản phẩm |
@@ -251,6 +261,7 @@ X-Service-Token: dev-service-token-change-in-production
 | `http://localhost:5010` | `GET /api/service/backend-health` | Trụ sở service kiểm tra backend trụ sở |
 | `http://localhost:5010` | `GET /api/service/peers/health` | Trụ sở service kiểm tra service chi nhánh |
 | `http://localhost:5010` | `POST /api/service/products/dispatch-event` | Dispatch một event sản phẩm từ trụ sở sang service chi nhánh |
+| `http://localhost:5010` | `POST /api/service/products/retry-due` | Service trụ sở retry các event đồng bộ đã tới hạn retry |
 | `http://localhost:5011` / `http://localhost:5012` | `GET /api/service/ping` | Kiểm tra service chi nhánh còn sống |
 | `http://localhost:5011` / `http://localhost:5012` | `GET /api/service/registry` | Xem backend và peer service chi nhánh đang cấu hình |
 | `http://localhost:5011` / `http://localhost:5012` | `GET /api/service/backend-health` | Service chi nhánh kiểm tra backend chi nhánh |

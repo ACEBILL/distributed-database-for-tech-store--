@@ -1,4 +1,4 @@
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 
 from middleware.auth import require_auth, require_branch_access, require_role
 from services.product_service import (
@@ -10,7 +10,11 @@ from services.product_service import (
     soft_delete_product,
     update_product,
 )
-from services.product_sync_service import get_product_sync_events_for_api
+from services.product_sync_service import (
+    get_product_sync_events_for_api,
+    retry_failed_product_sync_events,
+    retry_product_sync_event,
+)
 
 
 product_api_bp = Blueprint("product_api", __name__, url_prefix="/api")
@@ -20,6 +24,20 @@ def _reject_branch_token_on_tru_so_alias():
     if request.path.startswith("/api/tru-so/") and g.current_user.get("scope") != "central":
         return jsonify({"error": "Central access required"}), 403
     return None
+
+
+def _service_authorized():
+    return request.headers.get("X-Service-Token") == current_app.config["SERVICE_TOKEN"]
+
+
+def _service_forbidden():
+    return jsonify({"success": False, "message": "Invalid service token"}), 403
+
+
+def _as_bool(value):
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes"}
 
 
 @product_api_bp.route("/san-pham")
@@ -90,7 +108,7 @@ def api_san_pham_sync_events():
         schema: {type: string}
       - name: status
         in: query
-        schema: {type: string, enum: [pending, sent, failed]}
+        schema: {type: string, enum: [pending, sent, failed, dead_letter]}
       - name: target_branch
         in: query
         schema: {type: string}
@@ -102,6 +120,100 @@ def api_san_pham_sync_events():
         description: Danh sách event đồng bộ sản phẩm
     """
     return jsonify(get_product_sync_events_for_api(request.args))
+
+
+@product_api_bp.route("/san-pham/sync-events/<event_id>/retry", methods=["POST"])
+@product_api_bp.route("/tru-so/san-pham/sync-events/<event_id>/retry", methods=["POST"])
+@require_role("admin", "giam_doc")
+def api_retry_san_pham_sync_event(event_id):
+    """Retry một event đồng bộ sản phẩm
+    ---
+    tags:
+      - Đồng bộ sản phẩm
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: event_id
+        in: path
+        required: true
+        schema: {type: string}
+      - name: force
+        in: query
+        schema: {type: boolean, default: false}
+        description: Cho phép retry cả event dead_letter
+    responses:
+      200:
+        description: Event đã được retry
+      404:
+        description: Không tìm thấy event
+    """
+    force = _as_bool(request.args.get("force"))
+    result = retry_product_sync_event(event_id, force=force)
+    if result is None:
+        return jsonify({"error": "Sync event not found"}), 404
+    return jsonify({"success": True, "message": "Sync event retried", "data": result})
+
+
+@product_api_bp.route("/san-pham/sync-events/retry-failed", methods=["POST"])
+@product_api_bp.route("/tru-so/san-pham/sync-events/retry-failed", methods=["POST"])
+@require_role("admin", "giam_doc")
+def api_retry_failed_san_pham_sync_events():
+    """Retry hàng loạt event đồng bộ sản phẩm đang lỗi/chờ xử lý
+    ---
+    tags:
+      - Đồng bộ sản phẩm
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              limit: {type: integer, default: 20}
+              due_only: {type: boolean, default: false}
+              include_dead_letter: {type: boolean, default: false}
+    responses:
+      200:
+        description: Kết quả retry hàng loạt
+    """
+    data = request.get_json(silent=True) or {}
+    result = retry_failed_product_sync_events(
+        limit=int(data.get("limit") or 20),
+        due_only=_as_bool(data.get("due_only")),
+        include_dead_letter=_as_bool(data.get("include_dead_letter")),
+    )
+    return jsonify({"success": True, "message": "Failed sync events retried", "data": result})
+
+
+@product_api_bp.route("/internal/products/sync-events/retry-due", methods=["POST"])
+def api_internal_retry_due_san_pham_sync_events():
+    """API nội bộ retry các event sync đã tới thời điểm retry
+    ---
+    tags:
+      - Đồng bộ sản phẩm nội bộ
+    parameters:
+      - name: X-Service-Token
+        in: header
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Kết quả retry các event tới hạn
+      403:
+        description: Service token không hợp lệ
+    """
+    if not _service_authorized():
+        return _service_forbidden()
+
+    data = request.get_json(silent=True) or {}
+    result = retry_failed_product_sync_events(
+        limit=int(data.get("limit") or 20),
+        due_only=True,
+        include_dead_letter=False,
+    )
+    return jsonify({"success": True, "message": "Due sync events retried", "data": result})
 
 
 @product_api_bp.route("/san-pham/<ma_sp>")

@@ -1,5 +1,7 @@
 import json
 import os
+import threading
+import time
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -7,6 +9,7 @@ from flask import Flask, jsonify, request
 
 
 app = Flask(__name__)
+_retry_worker_started = False
 
 
 def _system_name():
@@ -71,6 +74,10 @@ def _post_json(url, payload):
     )
     with urlopen(req, timeout=10) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def _backend_post(path, payload):
+    return _post_json(f"{_backend_api_url()}{path}", payload)
 
 
 @app.get("/api/service/ping")
@@ -150,5 +157,52 @@ def dispatch_product_event():
     )
 
 
+@app.post("/api/service/products/retry-due")
+def retry_due_product_events():
+    if not _service_authorized():
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+
+    try:
+        result = _backend_post(
+            "/api/internal/products/sync-events/retry-due",
+            request.get_json(silent=True) or {},
+        )
+    except (OSError, URLError, TimeoutError) as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
+
+    return jsonify(result)
+
+
+def _auto_retry_enabled():
+    return os.getenv("PRODUCT_SYNC_AUTO_RETRY", "1").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _auto_retry_interval_seconds():
+    return max(5, int(os.getenv("PRODUCT_SYNC_RETRY_INTERVAL_SECONDS", "30")))
+
+
+def _auto_retry_loop():
+    while True:
+        time.sleep(_auto_retry_interval_seconds())
+        try:
+            _backend_post("/api/internal/products/sync-events/retry-due", {"limit": 20})
+        except Exception:
+            pass
+
+
+def _start_retry_worker():
+    global _retry_worker_started
+    if _retry_worker_started or not _auto_retry_enabled():
+        return
+    _retry_worker_started = True
+    thread = threading.Thread(target=_auto_retry_loop, daemon=True)
+    thread.start()
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    _start_retry_worker()
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
