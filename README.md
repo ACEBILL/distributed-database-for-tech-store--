@@ -42,7 +42,9 @@ docker compose up -d --build
 | Service trụ sở | http://localhost:5010 | Service nội bộ điều phối đồng bộ |
 | Service CN01 | http://localhost:5011 | Service nội bộ chi nhánh MySQL |
 | Service CN02 | http://localhost:5012 | Service nội bộ chi nhánh PostgreSQL |
-| Swagger UI | http://localhost:5000/apidocs | Tài liệu API |
+| Swagger UI trụ sở | http://localhost:5000/apidocs | Tài liệu API trụ sở / middleware |
+| Swagger UI CN01 | http://localhost:5001/apidocs | Tài liệu API backend chi nhánh MySQL |
+| Swagger UI CN02 | http://localhost:5002/apidocs | Tài liệu API backend chi nhánh PostgreSQL |
 | SQL Server | localhost,1433 | `sa` / `MyPass@2025` mặc định |
 | MySQL CN01 | localhost:3306 | `techstore` / `MyPass@2025`, DB `quan_ly_chi_nhanh` |
 | PostgreSQL CN02 | localhost:5432 | `techstore` / `MyPass@2025`, DB `quan_ly_chi_nhanh` |
@@ -54,12 +56,16 @@ Swagger UI:
 
 ```text
 http://localhost:5000/apidocs
+http://localhost:5001/apidocs
+http://localhost:5002/apidocs
 ```
 
 OpenAPI JSON:
 
 ```text
 http://localhost:5000/apispec_1.json
+http://localhost:5001/apispec_1.json
+http://localhost:5002/apispec_1.json
 ```
 
 Base URL thường dùng:
@@ -474,7 +480,9 @@ Backend Flask API / Middleware
 | Service tru so | http://localhost:5010 | Service noi bo dispatch event sync |
 | Service CN01 | http://localhost:5011 | Service noi bo nhan event sync CN01 |
 | Service CN02 | http://localhost:5012 | Service noi bo nhan event sync CN02 |
-| Swagger UI | http://localhost:5000/apidocs | Tai lieu API |
+| Swagger UI tru so | http://localhost:5000/apidocs | Tai lieu API tru so / middleware |
+| Swagger UI CN01 | http://localhost:5001/apidocs | Tai lieu API backend chi nhanh MySQL |
+| Swagger UI CN02 | http://localhost:5002/apidocs | Tai lieu API backend chi nhanh PostgreSQL |
 | SQL Server trung tam | localhost,1433 | DB chinh |
 | MySQL CN01 | localhost:3306 | DB chi nhanh |
 | PostgreSQL CN02 | localhost:5432 | DB chi nhanh |

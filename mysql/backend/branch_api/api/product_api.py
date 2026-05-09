@@ -28,6 +28,16 @@ def _service_forbidden():
 @product_api_bp.route("/san-pham")
 @require_auth
 def api_san_pham():
+    """Danh sách sản phẩm của chi nhánh hiện tại
+    ---
+    tags:
+      - Sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: Danh sách sản phẩm đọc từ DB chi nhánh
+    """
     payload = get_products_from_branch_database_for_api(_branch_code())
     if payload is None:
         return jsonify({"error": "Branch not found"}), 404
@@ -36,6 +46,21 @@ def api_san_pham():
 
 @product_api_bp.route("/internal/products/apply-change", methods=["POST"])
 def api_internal_apply_product_change():
+    """API nội bộ apply một event đồng bộ sản phẩm
+    ---
+    tags:
+      - Đồng bộ sản phẩm nội bộ
+    parameters:
+      - name: X-Service-Token
+        in: header
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Event đã được xử lý
+      403:
+        description: Service token không hợp lệ
+    """
     if not _service_authorized():
         return _service_forbidden()
 
@@ -57,6 +82,19 @@ def api_internal_apply_product_change():
 
 @product_api_bp.route("/internal/products/apply-batch", methods=["POST"])
 def api_internal_apply_product_batch():
+    """API nội bộ apply nhiều event đồng bộ sản phẩm
+    ---
+    tags:
+      - Đồng bộ sản phẩm nội bộ
+    parameters:
+      - name: X-Service-Token
+        in: header
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Batch đã được xử lý
+    """
     if not _service_authorized():
         return _service_forbidden()
 
@@ -66,6 +104,19 @@ def api_internal_apply_product_batch():
 
 @product_api_bp.route("/internal/products/local-version")
 def api_internal_product_local_version():
+    """API nội bộ xem version đồng bộ sản phẩm hiện tại
+    ---
+    tags:
+      - Đồng bộ sản phẩm nội bộ
+    parameters:
+      - name: X-Service-Token
+        in: header
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Version đồng bộ hiện tại
+    """
     if not _service_authorized():
         return _service_forbidden()
 
@@ -80,6 +131,28 @@ def api_internal_product_local_version():
 
 @product_api_bp.route("/internal/products/sync-log")
 def api_internal_product_sync_log():
+    """API nội bộ xem log đồng bộ sản phẩm
+    ---
+    tags:
+      - Đồng bộ sản phẩm nội bộ
+    parameters:
+      - name: X-Service-Token
+        in: header
+        required: true
+        schema: {type: string}
+      - name: ma_sp
+        in: query
+        schema: {type: string}
+      - name: from_version
+        in: query
+        schema: {type: integer}
+      - name: to_version
+        in: query
+        schema: {type: integer}
+    responses:
+      200:
+        description: Log xử lý event đồng bộ
+    """
     if not _service_authorized():
         return _service_forbidden()
 
@@ -95,6 +168,23 @@ def api_internal_product_sync_log():
 @product_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/san-pham")
 @require_auth
 def api_san_pham_from_branch_database(ma_chi_nhanh):
+    """Danh sách sản phẩm theo namespace chi nhánh
+    ---
+    tags:
+      - Sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_chi_nhanh
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Danh sách sản phẩm của chi nhánh
+      403:
+        description: Backend này không phục vụ chi nhánh được yêu cầu
+    """
     if ma_chi_nhanh.upper() != _branch_code():
         return jsonify({"error": "This API only serves its configured branch"}), 403
 

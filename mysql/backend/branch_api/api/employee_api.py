@@ -30,6 +30,35 @@ def _can_manage_employees():
 @employee_api_bp.route("/nhan-vien")
 @require_auth
 def api_nhan_vien():
+    """Danh sách nhân viên của chi nhánh hiện tại
+    ---
+    tags:
+      - Nhân viên chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: keyword
+        in: query
+        schema: {type: string}
+      - name: chuc_vu
+        in: query
+        schema: {type: string}
+      - name: trang_thai
+        in: query
+        schema: {type: integer}
+      - name: ma_phong_ban
+        in: query
+        schema: {type: integer}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50}
+    responses:
+      200:
+        description: Danh sách nhân viên chi nhánh kèm pagination
+    """
     result = get_employees_from_branch_database_for_api(_branch_code(), request.args)
     if not _is_admin_user():
         result["data"] = mask_employees_list(result["data"], False)
@@ -39,6 +68,23 @@ def api_nhan_vien():
 @employee_api_bp.route("/nhan-vien/<ma_nhan_vien>")
 @require_auth
 def api_nhan_vien_detail(ma_nhan_vien):
+    """Chi tiết nhân viên của chi nhánh hiện tại
+    ---
+    tags:
+      - Nhân viên chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_nhan_vien
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Chi tiết nhân viên chi nhánh
+      404:
+        description: Không tìm thấy nhân viên
+    """
     employee = get_employee_by_id_from_branch_database_for_api(
         _branch_code(),
         ma_nhan_vien,
@@ -51,6 +97,27 @@ def api_nhan_vien_detail(ma_nhan_vien):
 @employee_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/nhan-vien")
 @require_branch_access
 def api_branch_nhan_vien(ma_chi_nhanh):
+    """Danh sách nhân viên theo namespace chi nhánh
+    ---
+    tags:
+      - Nhân viên chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_chi_nhanh
+        in: path
+        required: true
+        schema: {type: string}
+      - name: page
+        in: query
+        schema: {type: integer, default: 1}
+      - name: limit
+        in: query
+        schema: {type: integer, default: 50}
+    responses:
+      200:
+        description: Danh sách nhân viên chi nhánh
+    """
     result = get_employees_from_branch_database_for_api(ma_chi_nhanh, request.args)
     if not _is_admin_user():
         result["data"] = mask_employees_list(result["data"], False)
@@ -60,6 +127,27 @@ def api_branch_nhan_vien(ma_chi_nhanh):
 @employee_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>")
 @require_branch_access
 def api_branch_nhan_vien_detail(ma_chi_nhanh, ma_nhan_vien):
+    """Chi tiết nhân viên theo namespace chi nhánh
+    ---
+    tags:
+      - Nhân viên chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_chi_nhanh
+        in: path
+        required: true
+        schema: {type: string}
+      - name: ma_nhan_vien
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Chi tiết nhân viên chi nhánh
+      404:
+        description: Không tìm thấy nhân viên
+    """
     employee = get_employee_by_id_from_branch_database_for_api(
         ma_chi_nhanh,
         ma_nhan_vien,
@@ -72,6 +160,16 @@ def api_branch_nhan_vien_detail(ma_chi_nhanh, ma_nhan_vien):
 @employee_api_bp.route("/nhan-vien", methods=["POST"])
 @require_auth
 def api_create_nhan_vien():
+    """Tạo nhân viên trong chi nhánh hiện tại
+    ---
+    tags:
+      - Nhân viên chi nhánh
+    security:
+      - bearerAuth: []
+    responses:
+      201:
+        description: Nhân viên chi nhánh đã được tạo
+    """
     if not _can_manage_employees():
         return jsonify({"error": "Forbidden"}), 403
 
@@ -85,6 +183,21 @@ def api_create_nhan_vien():
 @employee_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/nhan-vien", methods=["POST"])
 @require_branch_access
 def api_create_branch_nhan_vien(ma_chi_nhanh):
+    """Tạo nhân viên theo namespace chi nhánh
+    ---
+    tags:
+      - Nhân viên chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_chi_nhanh
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      201:
+        description: Nhân viên chi nhánh đã được tạo
+    """
     if not _can_manage_employees():
         return jsonify({"error": "Forbidden"}), 403
 
@@ -98,6 +211,23 @@ def api_create_branch_nhan_vien(ma_chi_nhanh):
 @employee_api_bp.route("/nhan-vien/<ma_nhan_vien>", methods=["PUT"])
 @require_auth
 def api_update_nhan_vien(ma_nhan_vien):
+    """Cập nhật nhân viên trong chi nhánh hiện tại
+    ---
+    tags:
+      - Nhân viên chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_nhan_vien
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Nhân viên chi nhánh đã được cập nhật
+      404:
+        description: Không tìm thấy nhân viên
+    """
     if not _can_manage_employees():
         return jsonify({"error": "Forbidden"}), 403
 
@@ -114,6 +244,27 @@ def api_update_nhan_vien(ma_nhan_vien):
 @employee_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>", methods=["PUT"])
 @require_branch_access
 def api_update_branch_nhan_vien(ma_chi_nhanh, ma_nhan_vien):
+    """Cập nhật nhân viên theo namespace chi nhánh
+    ---
+    tags:
+      - Nhân viên chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_chi_nhanh
+        in: path
+        required: true
+        schema: {type: string}
+      - name: ma_nhan_vien
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Nhân viên chi nhánh đã được cập nhật
+      404:
+        description: Không tìm thấy nhân viên
+    """
     if not _can_manage_employees():
         return jsonify({"error": "Forbidden"}), 403
 
@@ -130,6 +281,23 @@ def api_update_branch_nhan_vien(ma_chi_nhanh, ma_nhan_vien):
 @employee_api_bp.route("/nhan-vien/<ma_nhan_vien>", methods=["DELETE"])
 @require_auth
 def api_delete_nhan_vien(ma_nhan_vien):
+    """Xóa mềm/ngưng nhân viên trong chi nhánh hiện tại
+    ---
+    tags:
+      - Nhân viên chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_nhan_vien
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Nhân viên chi nhánh đã được ngưng
+      404:
+        description: Không tìm thấy nhân viên
+    """
     if not _can_manage_employees():
         return jsonify({"error": "Forbidden"}), 403
 
@@ -142,6 +310,27 @@ def api_delete_nhan_vien(ma_nhan_vien):
 @employee_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>", methods=["DELETE"])
 @require_branch_access
 def api_delete_branch_nhan_vien(ma_chi_nhanh, ma_nhan_vien):
+    """Xóa mềm/ngưng nhân viên theo namespace chi nhánh
+    ---
+    tags:
+      - Nhân viên chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_chi_nhanh
+        in: path
+        required: true
+        schema: {type: string}
+      - name: ma_nhan_vien
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Nhân viên chi nhánh đã được ngưng
+      404:
+        description: Không tìm thấy nhân viên
+    """
     if not _can_manage_employees():
         return jsonify({"error": "Forbidden"}), 403
 
