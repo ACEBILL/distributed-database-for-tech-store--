@@ -14,6 +14,7 @@ from db import (
 
 EMPLOYEE_COLUMNS_SQL = """
     nv.ma_nhan_vien,
+    nv.ma_chi_nhanh,
     nv.ho_ten,
     nv.cccd,
     nv.sdt,
@@ -37,6 +38,7 @@ EMPLOYEE_SELECT_SQL = "SELECT " + EMPLOYEE_COLUMNS_SQL + EMPLOYEE_FROM_SQL
 
 EMPLOYEE_MUTABLE_FIELDS = {
     "ho_ten": "ho_ten",
+    "ma_chi_nhanh": "ma_chi_nhanh",
     "cccd": "cccd",
     "sdt": "sdt",
     "luong": "luong",
@@ -79,6 +81,11 @@ def _build_employee_filters(args):
     if chuc_vu:
         where.append("nv.chuc_vu = ?")
         params.append(chuc_vu)
+
+    ma_chi_nhanh = args.get("ma_chi_nhanh")
+    if ma_chi_nhanh:
+        where.append("nv.ma_chi_nhanh = ?")
+        params.append(ma_chi_nhanh)
 
     trang_thai = args.get("trang_thai")
     if trang_thai not in (None, ""):
@@ -183,17 +190,18 @@ def _create_employee_with_executor(executor, password_hash, data):
     executor(
         """
         INSERT INTO NHAN_VIEN (
-            ma_nhan_vien, ho_ten, cccd, sdt, luong, mat_khau, trang_thai,
+            ma_nhan_vien, ma_chi_nhanh, ho_ten, cccd, sdt, luong, mat_khau, trang_thai,
             ma_phong_ban, ma_ngay_lam, chuc_vu, ngay_bat_dau, ngay_ket_thuc
         )
         VALUES (
-            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
             {password_hash},
             ?, ?, ?, ?, ?, ?
         )
         """.format(password_hash=password_hash),
         (
             data["ma_nhan_vien"],
+            data.get("ma_chi_nhanh"),
             data["ho_ten"],
             data.get("cccd"),
             data.get("sdt"),
@@ -210,11 +218,15 @@ def _create_employee_with_executor(executor, password_hash, data):
 
 
 def create_employee(data):
+    data = dict(data)
+    data.setdefault("ma_chi_nhanh", "TRU_SO")
     _create_employee_with_executor(execute_db, password_hash_sql(), data)
     return get_employee_by_id_for_api(data["ma_nhan_vien"])
 
 
 def create_employee_in_branch(ma_chi_nhanh, data):
+    data = dict(data)
+    data["ma_chi_nhanh"] = ma_chi_nhanh.upper()
     branch_engine = get_branch_db_engine(ma_chi_nhanh)
     _create_employee_with_executor(
         lambda sql, params=None: execute_branch_db(ma_chi_nhanh, sql, params),
@@ -326,9 +338,9 @@ def get_employees_by_branch_for_api(ma_chi_nhanh):
     if not branch:
         return []
 
-    # Hiện tại trả về tất cả nhân viên (không thể lọc theo chi nhánh)
     employees = query_db(
-        EMPLOYEE_SELECT_SQL + " ORDER BY nv.ma_nhan_vien"
+        EMPLOYEE_SELECT_SQL + " WHERE nv.ma_chi_nhanh = ? ORDER BY nv.ma_nhan_vien",
+        (ma_chi_nhanh,),
     )
     for employee in employees:
         format_employee(employee)

@@ -50,7 +50,7 @@ Vai trò từng node:
 | Entity | Chiến lược | Node lưu trữ | Ghi chú |
 |---|---|---|---|
 | `chi_nhanh` | Metadata trung tâm | HQ chính, branch có bản local tối thiểu | Không gọi là replicated nếu chỉ phụ thuộc HQ |
-| `NHAN_VIEN` | Phân mảnh ngang theo node | HQ/CN01/CN02 | Mỗi node giữ nhân viên của mình |
+| `NHAN_VIEN` | Phân mảnh ngang theo `ma_chi_nhanh` | HQ/CN01/CN02 | Đã có cột `ma_chi_nhanh` để xác định owner: `TRU_SO`, `CN01`, `CN02` |
 | `phong_ban` | Dữ liệu cục bộ | Mỗi node | Phù hợp với tổ chức từng nơi |
 | `loai_sp` | Phân mảnh ngang theo `ma_chi_nhanh` | HQ global catalog, branch subset | Cần API minh chứng theo branch |
 | `NCC` | Reference data replicated | HQ -> branch | HQ là source of truth |

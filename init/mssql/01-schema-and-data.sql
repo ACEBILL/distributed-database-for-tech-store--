@@ -215,6 +215,14 @@ INSERT INTO NHAN_VIEN VALUES
 (N'NV019', N'Châu Minh Quân',    N'001099019019', N'0901000019', 12000000, CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', 'pass123'), 2), 1, 6, 130, N'nhan_vien',   '2022-09-01', NULL),
 (N'NV020', N'Lương Thị Vân',      N'001099020020', N'0901000020', 11000000, CONVERT(NVARCHAR(255), HASHBYTES('SHA2_256', 'pass123'), 2), 0, 2, 90,  N'nhan_vien',   '2023-01-01', '2024-12-31');
 
+IF COL_LENGTH('NHAN_VIEN', 'ma_chi_nhanh') IS NULL
+    EXEC('ALTER TABLE NHAN_VIEN ADD ma_chi_nhanh NVARCHAR(20) NULL');
+
+EXEC('UPDATE NHAN_VIEN SET ma_chi_nhanh = N''TRU_SO'' WHERE ma_chi_nhanh IS NULL');
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_nv_chi_nhanh' AND object_id = OBJECT_ID('dbo.NHAN_VIEN'))
+    EXEC('CREATE NONCLUSTERED INDEX idx_nv_chi_nhanh ON NHAN_VIEN(ma_chi_nhanh)');
+
 -- Cập nhật trưởng phòng
 UPDATE phong_ban SET ma_nv = 2  WHERE ma_pb = 2;
 UPDATE phong_ban SET ma_nv = 7  WHERE ma_pb = 3;
@@ -222,6 +230,15 @@ UPDATE phong_ban SET ma_nv = 11 WHERE ma_pb = 4;
 UPDATE phong_ban SET ma_nv = 14 WHERE ma_pb = 5;
 UPDATE phong_ban SET ma_nv = 17 WHERE ma_pb = 6;
 END
+GO
+
+IF COL_LENGTH('NHAN_VIEN', 'ma_chi_nhanh') IS NULL
+    EXEC('ALTER TABLE NHAN_VIEN ADD ma_chi_nhanh NVARCHAR(20) NULL');
+
+EXEC('UPDATE NHAN_VIEN SET ma_chi_nhanh = N''TRU_SO'' WHERE ma_chi_nhanh IS NULL');
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_nv_chi_nhanh' AND object_id = OBJECT_ID('dbo.NHAN_VIEN'))
+    EXEC('CREATE NONCLUSTERED INDEX idx_nv_chi_nhanh ON NHAN_VIEN(ma_chi_nhanh)');
 GO
 
 

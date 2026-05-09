@@ -163,6 +163,15 @@ INSERT INTO NHAN_VIEN (
 ('NV005', 'Hoàng Đức Anh',    '001099005005', '0901000005', 12000000, UPPER(ENCODE(DIGEST('pass123', 'sha256'), 'hex')), 1, 3, 140, 'nhan_vien',    '2022-06-15', NULL)
 ON CONFLICT (ma_nhan_vien) DO NOTHING;
 
+ALTER TABLE NHAN_VIEN
+    ADD COLUMN IF NOT EXISTS ma_chi_nhanh VARCHAR(20) NULL;
+
+UPDATE NHAN_VIEN
+SET ma_chi_nhanh = 'CN02'
+WHERE ma_chi_nhanh IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_nv_chi_nhanh ON NHAN_VIEN(ma_chi_nhanh);
+
 UPDATE phong_ban SET ma_nv = 2 WHERE ma_pb = 2;
 UPDATE phong_ban SET ma_nv = 3 WHERE ma_pb = 3;
 

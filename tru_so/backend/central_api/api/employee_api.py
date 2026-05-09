@@ -57,6 +57,9 @@ def api_nhan_vien():
       - name: chuc_vu
         in: query
         schema: {type: string}
+      - name: ma_chi_nhanh
+        in: query
+        schema: {type: string}
       - name: trang_thai
         in: query
         schema: {type: integer}
@@ -212,6 +215,9 @@ def api_create_nhan_vien():
             required: [ma_nhan_vien, ho_ten, mat_khau, ma_phong_ban]
             properties:
               ma_nhan_vien: {type: string}
+              ma_chi_nhanh:
+                type: string
+                example: TRU_SO
               ho_ten: {type: string}
               mat_khau: {type: string}
               cccd: {type: string}

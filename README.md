@@ -85,7 +85,8 @@ Base URL thường dùng:
 - Swagger UI trong môi trường demo tự gắn JWT demo vào request, nên có thể bấm `Try it out` mà không cần dán token ở nút `Authorize`. Nếu gọi endpoint login trong Swagger, token trả về sẽ được lưu và dùng cho các request sau.
 - `GET /api/nhan-vien` và `GET /api/nhan-vien/<ma_nhan_vien>` yêu cầu xác thực; các trường nhạy cảm được che với user không phải admin/giam_doc.
 - `GET /api/san-pham` hỗ trợ query string: `keyword`, `ma_loai_sp`, `ma_ncc`, `trang_thai`, `gia_min`, `gia_max`, `page`, `limit`.
-- `GET /api/nhan-vien` và `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` hỗ trợ query string: `keyword`, `chuc_vu`, `trang_thai`, `ma_phong_ban`, `page`, `limit`.
+- `GET /api/nhan-vien` và `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` hỗ trợ query string: `keyword`, `chuc_vu`, `ma_chi_nhanh`, `trang_thai`, `ma_phong_ban`, `page`, `limit`.
+- Bảng `NHAN_VIEN` ở cả SQL Server/MySQL/PostgreSQL có cột `ma_chi_nhanh` để xác định owner dữ liệu nhân viên (`TRU_SO`, `CN01`, `CN02`).
 - `GET /api/san-pham/sync-events` hỗ trợ query string: `status`, `target_branch`, `ma_sp`, `event_type`.
 - `POST /api/san-pham/sync-events/<event_id>/retry` retry một event đồng bộ; `POST /api/san-pham/sync-events/retry-failed` retry hàng loạt event lỗi/chờ xử lý.
 - `GET /api/system/health` tổng hợp health của trụ sở, service chi nhánh, DB chi nhánh, pending events và `last_sync_version`.

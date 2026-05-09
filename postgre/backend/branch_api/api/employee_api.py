@@ -43,6 +43,9 @@ def api_nhan_vien():
       - name: chuc_vu
         in: query
         schema: {type: string}
+      - name: ma_chi_nhanh
+        in: query
+        schema: {type: string}
       - name: trang_thai
         in: query
         schema: {type: integer}

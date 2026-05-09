@@ -143,6 +143,42 @@ INSERT IGNORE INTO NHAN_VIEN (
 ('NV004', 'Phạm Thị Hương', '001099004004', '0901000004', 12000000, UPPER(SHA2('pass123', 256)), 1, 2, 150, 'nhan_vien', '2022-03-01', NULL),
 ('NV005', 'Hoàng Đức Anh', '001099005005', '0901000005', 12000000, UPPER(SHA2('pass123', 256)), 1, 3, 140, 'nhan_vien', '2022-06-15', NULL);
 
+SET @col_exists := (
+    SELECT COUNT(*)
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'NHAN_VIEN'
+      AND column_name = 'ma_chi_nhanh'
+);
+SET @sql := IF(
+    @col_exists = 0,
+    'ALTER TABLE NHAN_VIEN ADD COLUMN ma_chi_nhanh VARCHAR(20) NULL',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+UPDATE NHAN_VIEN
+SET ma_chi_nhanh = 'CN01'
+WHERE ma_chi_nhanh IS NULL;
+
+SET @idx_exists := (
+    SELECT COUNT(*)
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'NHAN_VIEN'
+      AND index_name = 'idx_nv_chi_nhanh'
+);
+SET @sql := IF(
+    @idx_exists = 0,
+    'CREATE INDEX idx_nv_chi_nhanh ON NHAN_VIEN(ma_chi_nhanh)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 UPDATE phong_ban SET ma_nv = 2 WHERE ma_pb = 2;
 UPDATE phong_ban SET ma_nv = 3 WHERE ma_pb = 3;
 
