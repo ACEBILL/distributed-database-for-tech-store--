@@ -82,6 +82,7 @@ Base URL thường dùng:
 ### Ghi chú triển khai hiện tại
 
 - `POST /api/auth/login` trả JWT cho người dùng hợp lệ, mặc định dữ liệu mẫu dùng mật khẩu `pass123`.
+- Swagger UI trong môi trường demo tự gắn JWT demo vào request, nên có thể bấm `Try it out` mà không cần dán token ở nút `Authorize`. Nếu gọi endpoint login trong Swagger, token trả về sẽ được lưu và dùng cho các request sau.
 - `GET /api/nhan-vien` và `GET /api/nhan-vien/<ma_nhan_vien>` yêu cầu xác thực; các trường nhạy cảm được che với user không phải admin/giam_doc.
 - `GET /api/san-pham` hỗ trợ query string: `keyword`, `ma_loai_sp`, `ma_ncc`, `trang_thai`, `gia_min`, `gia_max`, `page`, `limit`.
 - `GET /api/nhan-vien` và `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` hỗ trợ query string: `keyword`, `chuc_vu`, `trang_thai`, `ma_phong_ban`, `page`, `limit`.
@@ -492,6 +493,7 @@ Backend Flask API / Middleware
 
 - Web tru so dung `POST /api/auth/login`.
 - Web CN01 dung `POST /api/auth/branches/CN01/login`.
+- Swagger UI tu gan JWT demo vao request trong ban demo, nen co the dung `Try it out` ma khong can dan token vao nut `Authorize`.
 - Token trung tam co `scope=central`.
 - Token chi nhanh co `scope=branch` va `branch_code=CN01`.
 

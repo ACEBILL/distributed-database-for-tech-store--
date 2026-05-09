@@ -1,5 +1,8 @@
+from datetime import datetime, timedelta, timezone
+
 from flasgger import Swagger
 from flask import Flask
+import jwt
 
 from central_api.api.auth_api import auth_api_bp
 from central_api.api.branch_api import branch_api_bp
@@ -11,6 +14,50 @@ from central_api.api.stats_api import stats_api_bp
 from central_api.api.supplier_api import supplier_api_bp
 from config import Config
 from middleware.error_handler import register_error_handlers
+
+
+def _swagger_ui_params_text(app):
+    now = datetime.now(timezone.utc)
+    token = jwt.encode(
+        {
+            "sub": "swagger-demo",
+            "ho_ten": "Swagger Demo",
+            "chuc_vu": "admin",
+            "ma_phong_ban": None,
+            "scope": "central",
+            "branch_code": None,
+            "source_engine": app.config["DB_ENGINE"],
+            "iat": now,
+            "exp": now + timedelta(hours=app.config["JWT_EXPIRES_HOURS"]),
+        },
+        app.config["JWT_SECRET"],
+        algorithm=app.config["JWT_ALGORITHM"],
+    )
+    return """
+{
+    persistAuthorization: true,
+    requestInterceptor: function(request) {
+        request.headers = request.headers || {};
+        var token = window.localStorage.getItem("techstore_swagger_token") || "%s";
+        if (token) {
+            request.headers["Authorization"] = "Bearer " + token;
+        }
+        return request;
+    },
+    responseInterceptor: function(response) {
+        try {
+            var token = response && response.obj && response.obj.token;
+            if (!token && response && response.text) {
+                token = JSON.parse(response.text).token;
+            }
+            if (token) {
+                window.localStorage.setItem("techstore_swagger_token", token);
+            }
+        } catch (error) {}
+        return response;
+    }
+}
+""" % token
 
 
 def create_app():
@@ -32,6 +79,7 @@ def create_app():
             }
         },
     }
+    app.config["SWAGGER"]["ui_params_text"] = _swagger_ui_params_text(app)
 
     app.register_blueprint(auth_api_bp)
     app.register_blueprint(branch_api_bp)
