@@ -10,6 +10,7 @@ from services.product_service import (
     soft_delete_product,
     update_product,
 )
+from services.product_sync_service import get_product_sync_events_for_api
 
 
 product_api_bp = Blueprint("product_api", __name__, url_prefix="/api")
@@ -25,6 +26,12 @@ def api_san_pham():
             )
         )
     return jsonify(get_products_for_api(request.args))
+
+
+@product_api_bp.route("/san-pham/sync-events")
+@require_role("admin", "giam_doc")
+def api_san_pham_sync_events():
+    return jsonify(get_product_sync_events_for_api(request.args))
 
 
 @product_api_bp.route("/san-pham/<ma_sp>")

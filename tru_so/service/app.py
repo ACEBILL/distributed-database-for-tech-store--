@@ -1,9 +1,9 @@
 import json
 import os
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 
 app = Flask(__name__)
@@ -28,8 +28,48 @@ def _peer_services():
     return peers
 
 
+def _branch_service_map():
+    mapping = {}
+    raw_value = os.getenv("BRANCH_SERVICE_MAP", "CN01=mysql,CN02=postgre")
+    for item in raw_value.split(","):
+        if not item.strip() or "=" not in item:
+            continue
+        branch_code, peer_name = item.split("=", 1)
+        mapping[branch_code.strip().upper()] = peer_name.strip()
+    return mapping
+
+
+def _service_token():
+    return os.getenv("SERVICE_TOKEN", "dev-service-token-change-in-production")
+
+
+def _service_authorized():
+    return request.headers.get("X-Service-Token") == _service_token()
+
+
 def _get_json(url):
     with urlopen(url, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _get_json_with_token(url):
+    req = Request(url, headers={"X-Service-Token": _service_token()}, method="GET")
+    with urlopen(req, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _post_json(url, payload):
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Service-Token": _service_token(),
+        },
+        method="POST",
+    )
+    with urlopen(req, timeout=10) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -66,6 +106,48 @@ def peer_health():
         except (OSError, URLError, TimeoutError) as exc:
             result[name] = {"status": "unreachable", "error": str(exc)}
     return jsonify(result)
+
+
+@app.post("/api/service/products/dispatch-event")
+def dispatch_product_event():
+    if not _service_authorized():
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+
+    event = request.get_json(silent=True) or {}
+    target_branch = (event.get("target_branch") or "").upper()
+    peer_name = _branch_service_map().get(target_branch)
+    peer_url = _peer_services().get(peer_name)
+    if not peer_url:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"No peer service configured for branch {target_branch}",
+                }
+            ),
+            400,
+        )
+
+    try:
+        local_version = _get_json_with_token(
+            f"{peer_url}/api/service/products/local-version"
+        )
+        applied = _post_json(f"{peer_url}/api/service/products/apply-change", event)
+    except (OSError, URLError, TimeoutError) as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
+
+    return jsonify(
+        {
+            "success": bool(applied.get("success")),
+            "message": "Product sync event dispatched",
+            "data": {
+                "target_branch": target_branch,
+                "peer": peer_name,
+                "local_version": local_version.get("data"),
+                "apply_result": applied,
+            },
+        }
+    )
 
 
 if __name__ == "__main__":

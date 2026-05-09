@@ -66,6 +66,24 @@ CREATE INDEX idx_sp_trangthai ON SAN_PHAM(trang_thai);
 CREATE INDEX idx_nv_pb ON NHAN_VIEN(ma_phong_ban);
 CREATE INDEX idx_nv_chucvu ON NHAN_VIEN(chuc_vu);
 
+CREATE TABLE IF NOT EXISTS sync_log (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    event_id VARCHAR(100) NOT NULL UNIQUE,
+    event_type VARCHAR(50) NOT NULL,
+    ma_sp VARCHAR(50),
+    version INT NOT NULL,
+    source VARCHAR(50),
+    target_branch VARCHAR(50),
+    status VARCHAR(20) NOT NULL,
+    message TEXT,
+    received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    applied_at DATETIME NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX idx_sync_log_version ON sync_log(version);
+CREATE INDEX idx_sync_log_status ON sync_log(status);
+CREATE INDEX idx_sync_log_ma_sp ON sync_log(ma_sp);
+
 INSERT IGNORE INTO chi_nhanh (ma_chi_nhanh, ten_chi_nhanh) VALUES
 ('CN01', 'Chi nhánh Hà Nội'),
 ('CN02', 'Chi nhánh TP.HCM');

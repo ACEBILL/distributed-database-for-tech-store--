@@ -11,6 +11,7 @@ from db import (
     query_db,
 )
 from services.cache_service import delete_cache, get_cache, set_cache
+from services.product_sync_service import create_product_sync_event
 
 
 PRODUCT_CACHE_KEY = "cache:san_pham_list"
@@ -102,7 +103,7 @@ def format_product(product):
 def get_product_by_id_for_api(ma_sp):
     product = query_db(
         """
-        SELECT sp.*, lsp.ten_loai_sp, ncc.ten_NCC
+        SELECT sp.*, lsp.ten_loai_sp, lsp.ma_chi_nhanh, ncc.ten_NCC
         FROM SAN_PHAM sp
         JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
         JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
@@ -141,7 +142,9 @@ def create_product(data):
         ),
     )
     delete_cache(PRODUCT_CACHE_KEY)
-    return get_product_by_id_for_api(data["ma_sp"])
+    product = get_product_by_id_for_api(data["ma_sp"])
+    create_product_sync_event("PRODUCT_CREATED", product)
+    return product
 
 
 def update_product(ma_sp, data):
@@ -180,7 +183,9 @@ def update_product(ma_sp, data):
         return None
 
     delete_cache(PRODUCT_CACHE_KEY)
-    return get_product_by_id_for_api(ma_sp)
+    product = get_product_by_id_for_api(ma_sp)
+    create_product_sync_event("PRODUCT_UPDATED", product)
+    return product
 
 
 def soft_delete_product(ma_sp):
@@ -194,6 +199,8 @@ def soft_delete_product(ma_sp):
     )
     if affected_rows:
         delete_cache(PRODUCT_CACHE_KEY)
+        product = get_product_by_id_for_api(ma_sp)
+        create_product_sync_event("PRODUCT_DELETED", product)
     return affected_rows > 0
 
 

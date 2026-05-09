@@ -113,6 +113,7 @@ services:
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       SERVICE_API_URL: ${TRU_SO_SERVICE_URL:-http://tru-so-service:5000}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-service-token-change-in-production}
       BRANCH_CN01_API_URL: ${BRANCH_CN01_API_URL:-http://mysql-backend:5000}
       BRANCH_CN02_API_URL: ${BRANCH_CN02_API_URL:-http://postgre-backend:5000}
       BRANCH_CN01_DB_HOST: ${BRANCH_CN01_DB_HOST:-mysql}
@@ -162,6 +163,7 @@ services:
       DB_PASSWORD: ${BRANCH_CN01_DB_PASSWORD:-MyPass@2025}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-service-token-change-in-production}
     ports:
       - "${CN01_API_PORT:-5001}:5000"
     volumes:
@@ -193,6 +195,7 @@ services:
       DB_PASSWORD: ${BRANCH_CN02_DB_PASSWORD:-MyPass@2025}
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-service-token-change-in-production}
     ports:
       - "${CN02_API_PORT:-5002}:5000"
     volumes:
@@ -215,6 +218,8 @@ services:
       SYSTEM_NAME: tru_so
       BACKEND_API_URL: http://tru-so-backend:5000
       PEER_SERVICE_URLS: mysql=http://mysql-service:5000,postgre=http://postgre-service:5000
+      BRANCH_SERVICE_MAP: ${BRANCH_SERVICE_MAP:-CN01=mysql,CN02=postgre}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-service-token-change-in-production}
     ports:
       - "${TRU_SO_SERVICE_PORT:-5010}:5000"
     depends_on:
@@ -232,6 +237,7 @@ services:
       SYSTEM_NAME: mysql
       BACKEND_API_URL: http://mysql-backend:5000
       PEER_SERVICE_URLS: tru_so=http://tru-so-service:5000,postgre=http://postgre-service:5000
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-service-token-change-in-production}
     ports:
       - "${MYSQL_SERVICE_PORT:-5011}:5000"
     depends_on:
@@ -249,6 +255,7 @@ services:
       SYSTEM_NAME: postgre
       BACKEND_API_URL: http://postgre-backend:5000
       PEER_SERVICE_URLS: tru_so=http://tru-so-service:5000,mysql=http://mysql-service:5000
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-service-token-change-in-production}
     ports:
       - "${POSTGRE_SERVICE_PORT:-5012}:5000"
     depends_on:

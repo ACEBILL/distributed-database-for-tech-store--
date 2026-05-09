@@ -1,9 +1,9 @@
 import json
 import os
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 
 app = Flask(__name__)
@@ -28,8 +28,39 @@ def _peer_services():
     return peers
 
 
+def _service_token():
+    return os.getenv("SERVICE_TOKEN", "dev-service-token-change-in-production")
+
+
+def _service_authorized():
+    return request.headers.get("X-Service-Token") == _service_token()
+
+
 def _get_json(url):
     with urlopen(url, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _backend_get(path):
+    url = f"{_backend_api_url()}{path}"
+    req = Request(url, headers={"X-Service-Token": _service_token()}, method="GET")
+    with urlopen(req, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _backend_post(path, payload):
+    url = f"{_backend_api_url()}{path}"
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Service-Token": _service_token(),
+        },
+        method="POST",
+    )
+    with urlopen(req, timeout=10) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -66,6 +97,60 @@ def peer_health():
         except (OSError, URLError, TimeoutError) as exc:
             result[name] = {"status": "unreachable", "error": str(exc)}
     return jsonify(result)
+
+
+@app.post("/api/service/products/apply-change")
+def apply_product_change():
+    if not _service_authorized():
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+    try:
+        return jsonify(
+            _backend_post(
+                "/api/internal/products/apply-change",
+                request.get_json(silent=True) or {},
+            )
+        )
+    except (OSError, URLError, TimeoutError) as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
+
+
+@app.post("/api/service/products/apply-batch")
+def apply_product_batch():
+    if not _service_authorized():
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+    try:
+        return jsonify(
+            _backend_post(
+                "/api/internal/products/apply-batch",
+                request.get_json(silent=True) or {},
+            )
+        )
+    except (OSError, URLError, TimeoutError) as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
+
+
+@app.get("/api/service/products/local-version")
+def product_local_version():
+    if not _service_authorized():
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+    try:
+        return jsonify(_backend_get("/api/internal/products/local-version"))
+    except (OSError, URLError, TimeoutError) as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
+
+
+@app.get("/api/service/products/sync-log")
+def product_sync_log():
+    if not _service_authorized():
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+    query_string = request.query_string.decode("utf-8")
+    path = "/api/internal/products/sync-log"
+    if query_string:
+        path += f"?{query_string}"
+    try:
+        return jsonify(_backend_get(path))
+    except (OSError, URLError, TimeoutError) as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
 
 
 if __name__ == "__main__":

@@ -60,6 +60,24 @@ CREATE INDEX IF NOT EXISTS idx_sp_trangthai ON SAN_PHAM(trang_thai);
 CREATE INDEX IF NOT EXISTS idx_nv_pb ON NHAN_VIEN(ma_phong_ban);
 CREATE INDEX IF NOT EXISTS idx_nv_chucvu ON NHAN_VIEN(chuc_vu);
 
+CREATE TABLE IF NOT EXISTS sync_log (
+    id SERIAL PRIMARY KEY,
+    event_id VARCHAR(100) NOT NULL UNIQUE,
+    event_type VARCHAR(50) NOT NULL,
+    ma_sp VARCHAR(50),
+    version INT NOT NULL,
+    source VARCHAR(50),
+    target_branch VARCHAR(50),
+    status VARCHAR(20) NOT NULL,
+    message TEXT,
+    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    applied_at TIMESTAMP NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_log_version ON sync_log(version);
+CREATE INDEX IF NOT EXISTS idx_sync_log_status ON sync_log(status);
+CREATE INDEX IF NOT EXISTS idx_sync_log_ma_sp ON sync_log(ma_sp);
+
 -- Trigger to mimic MySQL's "ON UPDATE CURRENT_TIMESTAMP" for cap_nhat_vao
 CREATE OR REPLACE FUNCTION trg_san_pham_touch_cap_nhat()
 RETURNS TRIGGER AS $$

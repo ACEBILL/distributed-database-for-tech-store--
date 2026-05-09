@@ -94,6 +94,27 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_nv_chucvu' AND object
     CREATE NONCLUSTERED INDEX idx_nv_chucvu ON NHAN_VIEN(chuc_vu);
 GO
 
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'product_sync_events')
+CREATE TABLE product_sync_events (
+    event_id NVARCHAR(100) PRIMARY KEY,
+    ma_sp NVARCHAR(20) NOT NULL,
+    event_type NVARCHAR(50) NOT NULL,
+    target_branch NVARCHAR(20) NOT NULL,
+    version INT NOT NULL,
+    payload NVARCHAR(MAX) NOT NULL,
+    status NVARCHAR(20) DEFAULT 'pending',
+    message NVARCHAR(MAX) NULL,
+    created_at DATETIME DEFAULT GETDATE(),
+    dispatched_at DATETIME NULL
+);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_product_sync_events_version' AND object_id = OBJECT_ID('dbo.product_sync_events'))
+    CREATE NONCLUSTERED INDEX idx_product_sync_events_version ON product_sync_events(version);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_product_sync_events_target_status' AND object_id = OBJECT_ID('dbo.product_sync_events'))
+    CREATE NONCLUSTERED INDEX idx_product_sync_events_target_status ON product_sync_events(target_branch, status);
+GO
+
 
 -- ─────────────────────────────────────
 --  2. DỮ LIỆU DUMMY
