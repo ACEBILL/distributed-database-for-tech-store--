@@ -36,7 +36,12 @@ docker compose up -d --build
 | Service | URL / Host | Ghi chú |
 |---|---|---|
 | Frontend | http://localhost:3000 | Giao diện client |
-| Backend API | http://localhost:5000 | Flask API |
+| Backend API trung tâm | http://localhost:5000 | Flask API trụ sở / middleware |
+| Backend API CN01 | http://localhost:5001 | Flask API chi nhánh MySQL |
+| Backend API CN02 | http://localhost:5002 | Flask API chi nhánh PostgreSQL |
+| Service trụ sở | http://localhost:5010 | Service nội bộ điều phối đồng bộ |
+| Service CN01 | http://localhost:5011 | Service nội bộ chi nhánh MySQL |
+| Service CN02 | http://localhost:5012 | Service nội bộ chi nhánh PostgreSQL |
 | Swagger UI | http://localhost:5000/apidocs | Tài liệu API |
 | SQL Server | localhost,1433 | `sa` / `MyPass@2025` mặc định |
 | MySQL CN01 | localhost:3306 | `techstore` / `MyPass@2025`, DB `quan_ly_chi_nhanh` |
@@ -57,10 +62,24 @@ OpenAPI JSON:
 http://localhost:5000/apispec_1.json
 ```
 
+Base URL thường dùng:
+
+| Nhóm API | Base URL | Khi dùng |
+|---|---|---|
+| API trung tâm | `http://localhost:5000` | Frontend portal/trụ sở, middleware đọc dữ liệu chi nhánh |
+| API CN01 | `http://localhost:5001` | Gọi trực tiếp backend MySQL CN01 khi test riêng chi nhánh |
+| API CN02 | `http://localhost:5002` | Gọi trực tiếp backend PostgreSQL CN02 khi test riêng chi nhánh |
+| Service trụ sở | `http://localhost:5010` | API nội bộ để dispatch event đồng bộ |
+| Service CN01 | `http://localhost:5011` | API nội bộ nhận/apply event đồng bộ CN01 |
+| Service CN02 | `http://localhost:5012` | API nội bộ nhận/apply event đồng bộ CN02 |
+
 ### Ghi chú triển khai hiện tại
 
 - `POST /api/auth/login` trả JWT cho người dùng hợp lệ, mặc định dữ liệu mẫu dùng mật khẩu `pass123`.
 - `GET /api/nhan-vien` và `GET /api/nhan-vien/<ma_nhan_vien>` yêu cầu xác thực; các trường nhạy cảm được che với user không phải admin/giam_doc.
+- `GET /api/san-pham` hỗ trợ query string: `keyword`, `ma_loai_sp`, `ma_ncc`, `trang_thai`, `gia_min`, `gia_max`, `page`, `limit`.
+- `GET /api/nhan-vien` và `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` hỗ trợ query string: `keyword`, `chuc_vu`, `trang_thai`, `ma_phong_ban`, `page`, `limit`.
+- `GET /api/san-pham/sync-events` hỗ trợ query string: `status`, `target_branch`, `ma_sp`, `event_type`.
 - Các thao tác ghi trên sản phẩm, loại sản phẩm, nhà cung cấp, nhân viên, chi nhánh và phòng ban đã được giới hạn theo vai trò.
 - Redis đang cache danh sách sản phẩm bằng key `cache:san_pham_list`.
 - Nhánh dữ liệu thống kê theo chi nhánh hiện có hai mã mẫu là `CN01` và `CN02`.
@@ -69,19 +88,41 @@ http://localhost:5000/apispec_1.json
 
 | Endpoint | Mô tả |
 |---|---|
+| `GET /api/ping` | Kiểm tra backend API còn sống |
+| `POST /api/auth/login` | Đăng nhập bằng tài khoản ở DB hiện tại |
+| `POST /api/auth/tru-so/login` | Alias đăng nhập rõ ràng cho trụ sở |
+| `POST /api/auth/branches/<ma_chi_nhanh>/login` | Đăng nhập chi nhánh thông qua API trung tâm, ví dụ `CN01`, `CN02` |
+| `GET /api/auth/me` | Lấy thông tin user từ JWT hiện tại |
+| `GET /api/auth/tru-so/me` | Alias lấy thông tin user trụ sở |
+| `GET /api/auth/branches/<ma_chi_nhanh>/me` | Alias lấy thông tin user chi nhánh |
 | `GET /api/san-pham` | Danh sách sản phẩm đang bán, có cache Redis |
+| `GET /api/san-pham?keyword=<tu_khoa>` | Tìm sản phẩm theo tên, mã hoặc mô tả |
+| `GET /api/san-pham?ma_loai_sp=<ma_loai_sp>` | Lọc sản phẩm theo loại |
+| `GET /api/san-pham?ma_ncc=<ma_ncc>` | Lọc sản phẩm theo nhà cung cấp |
+| `GET /api/san-pham?trang_thai=1&gia_min=<min>&gia_max=<max>` | Lọc sản phẩm theo trạng thái và khoảng giá |
+| `GET /api/san-pham?page=1&limit=10` | Phân trang danh sách sản phẩm |
 | `GET /api/san-pham/<ma_sp>` | Chi tiết sản phẩm |
 | `POST /api/san-pham` | Tạo sản phẩm |
 | `PUT /api/san-pham/<ma_sp>` | Cập nhật sản phẩm |
 | `DELETE /api/san-pham/<ma_sp>` | Ngưng bán sản phẩm |
+| `GET /api/san-pham/sync-events` | Xem event đồng bộ sản phẩm đã tạo ở trụ sở |
+| `GET /api/san-pham/sync-events?ma_sp=<ma_sp>&status=<status>` | Lọc event đồng bộ theo sản phẩm/trạng thái |
 | `GET /api/san-pham-theo-chi-nhanh` | Sản phẩm theo chi nhánh |
 | `GET /api/san-pham/chi-nhanh/<ma_chi_nhanh>` | Sản phẩm theo mã chi nhánh |
+| `GET /api/san-pham/loai/<ma_loai_sp>` | Sản phẩm theo mã loại sản phẩm |
+| `GET /api/san-pham/ncc/<ma_ncc>` | Sản phẩm theo mã nhà cung cấp |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/san-pham` | Đọc sản phẩm trực tiếp từ DB chi nhánh qua middleware trung tâm |
 | `GET /api/nhan-vien` | Danh sách nhân viên |
+| `GET /api/nhan-vien?keyword=<tu_khoa>` | Tìm nhân viên theo tên, mã, CCCD hoặc SĐT |
+| `GET /api/nhan-vien?chuc_vu=<chuc_vu>&trang_thai=1&ma_phong_ban=<ma_pb>` | Lọc nhân viên theo chức vụ, trạng thái, phòng ban |
+| `GET /api/nhan-vien?page=1&limit=10` | Phân trang danh sách nhân viên |
 | `GET /api/nhan-vien/<ma_nhan_vien>` | Chi tiết nhân viên |
 | `POST /api/nhan-vien` | Tạo nhân viên |
 | `PUT /api/nhan-vien/<ma_nhan_vien>` | Cập nhật nhân viên |
 | `DELETE /api/nhan-vien/<ma_nhan_vien>` | Xóa mềm nhân viên |
 | `GET /api/nhan-vien/phong-ban/<ma_pb>` | Nhân viên theo mã phòng ban |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` | Đọc nhân viên trực tiếp từ DB chi nhánh qua middleware trung tâm |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien?page=1&limit=10` | Phân trang nhân viên đọc từ DB chi nhánh |
 | `GET /api/phong-ban` | Danh sách phòng ban |
 | `GET /api/phong-ban/<ma_pb>` | Chi tiết phòng ban |
 | `POST /api/phong-ban` | Tạo phòng ban |
@@ -92,6 +133,7 @@ http://localhost:5000/apispec_1.json
 | `POST /api/chi-nhanh` | Tạo chi nhánh |
 | `PUT /api/chi-nhanh/<ma_chi_nhanh>` | Cập nhật chi nhánh |
 | `DELETE /api/chi-nhanh/<ma_chi_nhanh>` | Xóa chi nhánh |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/health` | Kiểm tra cấu hình/kết nối DB chi nhánh |
 | `GET /api/loai-san-pham` | Danh sách loại sản phẩm |
 | `GET /api/loai-san-pham/<ma_loai_sp>` | Chi tiết loại sản phẩm |
 | `POST /api/loai-san-pham` | Tạo loại sản phẩm |
@@ -105,6 +147,111 @@ http://localhost:5000/apispec_1.json
 | `GET /api/thong-ke` | Danh sách chi nhánh và trạng thái cấu hình DB chi nhánh |
 | `GET /api/thong-ke/chi-nhanh` | Thống kê sản phẩm theo chi nhánh |
 | `GET /api/thong-ke/luong-phong-ban` | Thống kê lương theo phòng ban |
+| `GET /api/thong-ke/san-pham-theo-chi-nhanh/<ma_chi_nhanh>` | Thống kê sản phẩm theo một chi nhánh |
+| `GET /api/thong-ke/nhan-vien-theo-chi-nhanh/<ma_chi_nhanh>` | Thống kê/danh sách nhân viên theo một chi nhánh |
+
+### API trụ sở rõ namespace
+
+Các endpoint này là alias rõ nghĩa cho dữ liệu trụ sở trên `http://localhost:5000`. Endpoint cũ vẫn còn để tương thích frontend/script hiện tại.
+
+| Endpoint | Mô tả |
+|---|---|
+| `GET /api/tru-so/ping` | Kiểm tra backend trụ sở còn sống |
+| `GET /api/tru-so/san-pham` | Danh sách sản phẩm ở SQL Server trung tâm |
+| `GET /api/tru-so/san-pham/<ma_sp>` | Chi tiết sản phẩm ở trụ sở |
+| `POST /api/tru-so/san-pham` | Tạo sản phẩm ở trụ sở |
+| `PUT /api/tru-so/san-pham/<ma_sp>` | Cập nhật sản phẩm ở trụ sở |
+| `DELETE /api/tru-so/san-pham/<ma_sp>` | Ngưng bán sản phẩm ở trụ sở |
+| `GET /api/tru-so/san-pham/sync-events` | Xem event đồng bộ sản phẩm phát sinh từ trụ sở |
+| `GET /api/tru-so/nhan-vien` | Danh sách nhân viên trụ sở |
+| `GET /api/tru-so/nhan-vien/<ma_nhan_vien>` | Chi tiết nhân viên trụ sở |
+| `POST /api/tru-so/nhan-vien` | Tạo nhân viên trụ sở |
+| `PUT /api/tru-so/nhan-vien/<ma_nhan_vien>` | Cập nhật nhân viên trụ sở |
+| `DELETE /api/tru-so/nhan-vien/<ma_nhan_vien>` | Xóa mềm nhân viên trụ sở nếu quyền cho phép |
+| `GET /api/tru-so/chi-nhanh` | Danh sách chi nhánh trong DB trung tâm |
+| `GET /api/tru-so/chi-nhanh/<ma_chi_nhanh>` | Chi tiết chi nhánh trong DB trung tâm |
+| `POST /api/tru-so/chi-nhanh` | Tạo chi nhánh trong DB trung tâm |
+| `PUT /api/tru-so/chi-nhanh/<ma_chi_nhanh>` | Cập nhật chi nhánh trong DB trung tâm |
+| `DELETE /api/tru-so/chi-nhanh/<ma_chi_nhanh>` | Xóa chi nhánh trong DB trung tâm |
+| `GET /api/tru-so/loai-san-pham` | Danh sách loại sản phẩm ở DB trung tâm |
+| `GET /api/tru-so/phong-ban` | Danh sách phòng ban ở DB trung tâm |
+| `GET /api/tru-so/nha-cung-cap` | Danh sách nhà cung cấp ở DB trung tâm |
+| `GET /api/tru-so/thong-ke` | Thống kê/metadata chi nhánh nhìn từ trụ sở |
+| `GET /api/tru-so/thong-ke/chi-nhanh` | Thống kê chi nhánh từ view trung tâm |
+| `GET /api/tru-so/thong-ke/luong-phong-ban` | Thống kê lương phòng ban từ view trung tâm |
+
+### API backend chi nhánh trực tiếp
+
+Các endpoint dưới đây có trên backend chi nhánh `CN01` (`http://localhost:5001`) và `CN02` (`http://localhost:5002`). Khi đi qua portal trung tâm, ưu tiên gọi các route middleware trên `http://localhost:5000`.
+
+Các route `/api/internal/products/...` là API nội bộ cho service, cần header `X-Service-Token`.
+
+| Endpoint | Mô tả |
+|---|---|
+| `GET /api/ping` | Kiểm tra backend chi nhánh còn sống |
+| `POST /api/auth/login` | Đăng nhập bằng tài khoản ở DB chi nhánh đang gọi |
+| `GET /api/auth/me` | Lấy thông tin user từ JWT chi nhánh |
+| `GET /api/chi-nhanh` | Thông tin chi nhánh hiện tại |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>` | Chi tiết chi nhánh hiện tại |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/health` | Kiểm tra health của DB chi nhánh |
+| `GET /api/internal/health` | Health nội bộ cho service gọi backend chi nhánh |
+| `GET /api/san-pham` | Danh sách sản phẩm ở DB chi nhánh |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/san-pham` | Danh sách sản phẩm theo mã chi nhánh |
+| `GET /api/nhan-vien` | Danh sách nhân viên ở DB chi nhánh, hỗ trợ `page` và `limit` |
+| `GET /api/nhan-vien/<ma_nhan_vien>` | Chi tiết nhân viên ở DB chi nhánh |
+| `POST /api/nhan-vien` | Tạo nhân viên ở DB chi nhánh |
+| `PUT /api/nhan-vien/<ma_nhan_vien>` | Cập nhật nhân viên ở DB chi nhánh |
+| `DELETE /api/nhan-vien/<ma_nhan_vien>` | Xóa mềm/ngưng nhân viên ở DB chi nhánh |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` | Danh sách nhân viên theo mã chi nhánh, hỗ trợ `page` và `limit` |
+| `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>` | Chi tiết nhân viên theo namespace chi nhánh |
+| `POST /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` | Tạo nhân viên theo namespace chi nhánh |
+| `PUT /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>` | Cập nhật nhân viên theo namespace chi nhánh |
+| `DELETE /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>` | Xóa mềm/ngưng nhân viên theo namespace chi nhánh |
+| `GET /api/loai-san-pham` | Danh sách loại sản phẩm ở DB chi nhánh |
+| `GET /api/loai-san-pham/<ma_loai_sp>` | Chi tiết loại sản phẩm |
+| `POST /api/loai-san-pham` | Tạo loại sản phẩm |
+| `PUT /api/loai-san-pham/<ma_loai_sp>` | Cập nhật loại sản phẩm |
+| `DELETE /api/loai-san-pham/<ma_loai_sp>` | Xóa loại sản phẩm |
+| `GET /api/phong-ban` | Danh sách phòng ban |
+| `GET /api/phong-ban/<ma_pb>` | Chi tiết phòng ban |
+| `POST /api/phong-ban` | Tạo phòng ban |
+| `PUT /api/phong-ban/<ma_pb>` | Cập nhật phòng ban |
+| `DELETE /api/phong-ban/<ma_pb>` | Xóa phòng ban |
+| `GET /api/nha-cung-cap` | Danh sách nhà cung cấp |
+| `GET /api/nha-cung-cap/<ma_ncc>` | Chi tiết nhà cung cấp |
+| `POST /api/nha-cung-cap` | Tạo nhà cung cấp |
+| `PUT /api/nha-cung-cap/<ma_ncc>` | Cập nhật nhà cung cấp |
+| `DELETE /api/nha-cung-cap/<ma_ncc>` | Xóa nhà cung cấp |
+| `GET /api/thong-ke` | Thống kê/metadata của chi nhánh |
+| `GET /api/thong-ke/health` | Health thống kê của chi nhánh |
+| `POST /api/internal/products/apply-change` | API nội bộ backend chi nhánh nhận một event sản phẩm từ service |
+| `POST /api/internal/products/apply-batch` | API nội bộ backend chi nhánh nhận nhiều event sản phẩm từ service |
+| `GET /api/internal/products/local-version` | API nội bộ xem version đồng bộ sản phẩm đã apply |
+| `GET /api/internal/products/sync-log` | API nội bộ xem log đồng bộ sản phẩm |
+
+### API service nội bộ
+
+Nhóm này không dành cho frontend gọi trực tiếp. Các request ghi/đọc sync cần header:
+
+```text
+X-Service-Token: dev-service-token-change-in-production
+```
+
+| Base URL | Endpoint | Mô tả |
+|---|---|---|
+| `http://localhost:5010` | `GET /api/service/ping` | Kiểm tra service trụ sở còn sống |
+| `http://localhost:5010` | `GET /api/service/registry` | Xem backend và peer service trụ sở đang cấu hình |
+| `http://localhost:5010` | `GET /api/service/backend-health` | Trụ sở service kiểm tra backend trụ sở |
+| `http://localhost:5010` | `GET /api/service/peers/health` | Trụ sở service kiểm tra service chi nhánh |
+| `http://localhost:5010` | `POST /api/service/products/dispatch-event` | Dispatch một event sản phẩm từ trụ sở sang service chi nhánh |
+| `http://localhost:5011` / `http://localhost:5012` | `GET /api/service/ping` | Kiểm tra service chi nhánh còn sống |
+| `http://localhost:5011` / `http://localhost:5012` | `GET /api/service/registry` | Xem backend và peer service chi nhánh đang cấu hình |
+| `http://localhost:5011` / `http://localhost:5012` | `GET /api/service/backend-health` | Service chi nhánh kiểm tra backend chi nhánh |
+| `http://localhost:5011` / `http://localhost:5012` | `GET /api/service/peers/health` | Service chi nhánh kiểm tra peer service |
+| `http://localhost:5011` / `http://localhost:5012` | `POST /api/service/products/apply-change` | Nhận và apply một event đồng bộ sản phẩm |
+| `http://localhost:5011` / `http://localhost:5012` | `POST /api/service/products/apply-batch` | Nhận và apply nhiều event đồng bộ sản phẩm |
+| `http://localhost:5011` / `http://localhost:5012` | `GET /api/service/products/local-version` | Xem version đồng bộ sản phẩm hiện tại ở chi nhánh |
+| `http://localhost:5011` / `http://localhost:5012` | `GET /api/service/products/sync-log` | Xem log xử lý event đồng bộ sản phẩm |
 
 ### Route API nên có theo database
 
@@ -320,8 +467,13 @@ Backend Flask API / Middleware
 
 | Service | URL / Host | Ghi chu |
 |---|---|---|
-| Frontend | http://localhost:3000 | Portal chon web, web tru so, web CN01 |
-| Backend API | http://localhost:5000 | Flask API / middleware |
+| Frontend | http://localhost:3000 | Portal chon web, web tru so, web CN01, web CN02 |
+| Backend API tru so | http://localhost:5000 | Flask API / middleware |
+| Backend API CN01 | http://localhost:5001 | Flask API chi nhanh MySQL |
+| Backend API CN02 | http://localhost:5002 | Flask API chi nhanh PostgreSQL |
+| Service tru so | http://localhost:5010 | Service noi bo dispatch event sync |
+| Service CN01 | http://localhost:5011 | Service noi bo nhan event sync CN01 |
+| Service CN02 | http://localhost:5012 | Service noi bo nhan event sync CN02 |
 | Swagger UI | http://localhost:5000/apidocs | Tai lieu API |
 | SQL Server trung tam | localhost,1433 | DB chinh |
 | MySQL CN01 | localhost:3306 | DB chi nhanh |

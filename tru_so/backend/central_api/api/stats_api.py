@@ -14,6 +14,7 @@ stats_api_bp = Blueprint("stats_api", __name__, url_prefix="/api")
 
 
 @stats_api_bp.route("/thong-ke")
+@stats_api_bp.route("/tru-so/thong-ke")
 @require_auth
 def api_thong_ke():
     """
@@ -52,6 +53,7 @@ def api_thong_ke():
 
 
 @stats_api_bp.route("/thong-ke/chi-nhanh")
+@stats_api_bp.route("/tru-so/thong-ke/chi-nhanh")
 @require_auth
 def api_thong_ke_chi_nhanh():
     """Lấy thống kê chi nhánh
@@ -68,6 +70,7 @@ def api_thong_ke_chi_nhanh():
 
 
 @stats_api_bp.route("/thong-ke/luong-phong-ban")
+@stats_api_bp.route("/tru-so/thong-ke/luong-phong-ban")
 @require_auth
 def api_thong_ke_luong_phong_ban():
     """Lấy thống kê lương theo phòng ban
@@ -84,6 +87,7 @@ def api_thong_ke_luong_phong_ban():
 
 
 @stats_api_bp.route("/thong-ke/san-pham-theo-chi-nhanh/<ma_chi_nhanh>")
+@stats_api_bp.route("/tru-so/thong-ke/san-pham-theo-chi-nhanh/<ma_chi_nhanh>")
 @require_branch_access
 def api_thong_ke_san_pham_theo_chi_nhanh(ma_chi_nhanh):
     """Lấy thống kê sản phẩm theo chi nhánh
@@ -105,6 +109,7 @@ def api_thong_ke_san_pham_theo_chi_nhanh(ma_chi_nhanh):
 
 
 @stats_api_bp.route("/thong-ke/nhan-vien-theo-chi-nhanh/<ma_chi_nhanh>")
+@stats_api_bp.route("/tru-so/thong-ke/nhan-vien-theo-chi-nhanh/<ma_chi_nhanh>")
 @require_branch_access
 def api_thong_ke_nhan_vien_theo_chi_nhanh(ma_chi_nhanh):
     """Lấy danh sách nhân viên theo chi nhánh

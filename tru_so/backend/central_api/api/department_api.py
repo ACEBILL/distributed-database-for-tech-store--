@@ -14,6 +14,7 @@ department_api_bp = Blueprint("department_api", __name__, url_prefix="/api")
 
 
 @department_api_bp.route("/phong-ban")
+@department_api_bp.route("/tru-so/phong-ban")
 def api_phong_ban_list():
     """
     Lấy danh sách phòng ban
@@ -38,6 +39,7 @@ def api_phong_ban_list():
 
 
 @department_api_bp.route("/phong-ban/<int:ma_pb>")
+@department_api_bp.route("/tru-so/phong-ban/<int:ma_pb>")
 def api_phong_ban_detail(ma_pb):
     """
     Lấy chi tiết phòng ban
@@ -63,6 +65,7 @@ def api_phong_ban_detail(ma_pb):
 
 
 @department_api_bp.route("/phong-ban", methods=["POST"])
+@department_api_bp.route("/tru-so/phong-ban", methods=["POST"])
 @require_role("admin", "giam_doc")
 def api_create_phong_ban():
     """
@@ -94,6 +97,7 @@ def api_create_phong_ban():
 
 
 @department_api_bp.route("/phong-ban/<int:ma_pb>", methods=["PUT"])
+@department_api_bp.route("/tru-so/phong-ban/<int:ma_pb>", methods=["PUT"])
 @require_role("admin", "giam_doc")
 def api_update_phong_ban(ma_pb):
     """
@@ -131,6 +135,7 @@ def api_update_phong_ban(ma_pb):
 
 
 @department_api_bp.route("/phong-ban/<int:ma_pb>", methods=["DELETE"])
+@department_api_bp.route("/tru-so/phong-ban/<int:ma_pb>", methods=["DELETE"])
 @require_role("admin", "giam_doc")
 def api_delete_phong_ban(ma_pb):
     """

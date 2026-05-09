@@ -11,8 +11,11 @@ def _configured_branch_code():
     return (current_app.config.get("BRANCH_CODE") or "").upper()
 
 
-@auth_api_bp.route("/login", methods=["POST"])
-def api_login():
+def _branch_code_matches(ma_chi_nhanh):
+    return (ma_chi_nhanh or "").upper() == _configured_branch_code()
+
+
+def _login_for_configured_branch():
     branch_code = _configured_branch_code()
     if not branch_code:
         return jsonify({"error": "BRANCH_CODE is required for branch API"}), 500
@@ -32,6 +35,18 @@ def api_login():
     return jsonify(result)
 
 
+@auth_api_bp.route("/login", methods=["POST"])
+def api_login():
+    return _login_for_configured_branch()
+
+
+@auth_api_bp.route("/branches/<ma_chi_nhanh>/login", methods=["POST"])
+def api_branch_login(ma_chi_nhanh):
+    if not _branch_code_matches(ma_chi_nhanh):
+        return jsonify({"error": "This API only serves its configured branch"}), 403
+    return _login_for_configured_branch()
+
+
 @auth_api_bp.route("/me")
 @require_auth
 def api_me():
@@ -47,3 +62,11 @@ def api_me():
             "exp": g.current_user.get("exp"),
         }
     )
+
+
+@auth_api_bp.route("/branches/<ma_chi_nhanh>/me")
+@require_auth
+def api_branch_me(ma_chi_nhanh):
+    if not _branch_code_matches(ma_chi_nhanh):
+        return jsonify({"error": "This API only serves its configured branch"}), 403
+    return api_me()

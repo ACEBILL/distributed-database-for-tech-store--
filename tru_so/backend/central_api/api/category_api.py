@@ -14,6 +14,7 @@ category_api_bp = Blueprint("category_api", __name__, url_prefix="/api")
 
 
 @category_api_bp.route("/loai-san-pham")
+@category_api_bp.route("/tru-so/loai-san-pham")
 def api_loai_san_pham_list():
     """Lấy danh sách loại sản phẩm
     ---
@@ -40,6 +41,7 @@ def api_loai_san_pham_list():
 
 
 @category_api_bp.route("/loai-san-pham/<ma_loai_sp>")
+@category_api_bp.route("/tru-so/loai-san-pham/<ma_loai_sp>")
 def api_loai_san_pham_detail(ma_loai_sp):
     """Lấy chi tiết loại sản phẩm
     ---
@@ -63,6 +65,7 @@ def api_loai_san_pham_detail(ma_loai_sp):
 
 
 @category_api_bp.route("/loai-san-pham", methods=["POST"])
+@category_api_bp.route("/tru-so/loai-san-pham", methods=["POST"])
 @require_role("admin", "giam_doc", "truong_phong")
 def api_create_loai_san_pham():
     """Tạo loại sản phẩm
@@ -96,6 +99,7 @@ def api_create_loai_san_pham():
 
 
 @category_api_bp.route("/loai-san-pham/<ma_loai_sp>", methods=["PUT"])
+@category_api_bp.route("/tru-so/loai-san-pham/<ma_loai_sp>", methods=["PUT"])
 @require_role("admin", "giam_doc", "truong_phong")
 def api_update_loai_san_pham(ma_loai_sp):
     """Cập nhật loại sản phẩm
@@ -129,6 +133,7 @@ def api_update_loai_san_pham(ma_loai_sp):
 
 
 @category_api_bp.route("/loai-san-pham/<ma_loai_sp>", methods=["DELETE"])
+@category_api_bp.route("/tru-so/loai-san-pham/<ma_loai_sp>", methods=["DELETE"])
 @require_role("admin", "giam_doc", "truong_phong")
 def api_delete_loai_san_pham(ma_loai_sp):
     """Xóa loại sản phẩm

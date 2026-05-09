@@ -22,7 +22,7 @@ def _token_matches_app_role(payload):
     token_scope = payload.get("scope", "central")
 
     if app_role == "central":
-        return token_scope == "central"
+        return token_scope in ("central", "branch")
 
     if app_role == "branch":
         configured_branch_code = _normalize_branch_code(
@@ -61,6 +61,10 @@ def require_role(*allowed_roles):
         @wraps(view)
         @require_auth
         def wrapper(*args, **kwargs):
+            app_role = (current_app.config.get("APP_ROLE") or "all").lower()
+            if app_role == "central" and g.current_user.get("scope") != "central":
+                return jsonify({"error": "Central access required"}), 403
+
             chuc_vu = g.current_user.get("chuc_vu")
             if chuc_vu not in allowed_roles:
                 return (
@@ -74,6 +78,17 @@ def require_role(*allowed_roles):
         return wrapper
 
     return decorator
+
+
+def require_central_scope(view):
+    @wraps(view)
+    @require_auth
+    def wrapper(*args, **kwargs):
+        if g.current_user.get("scope") != "central":
+            return jsonify({"error": "Central access required"}), 403
+        return view(*args, **kwargs)
+
+    return wrapper
 
 
 def require_branch_access(view):

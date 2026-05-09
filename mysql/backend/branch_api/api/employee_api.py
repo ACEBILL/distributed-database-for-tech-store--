@@ -57,6 +57,18 @@ def api_branch_nhan_vien(ma_chi_nhanh):
     return jsonify(result)
 
 
+@employee_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>")
+@require_branch_access
+def api_branch_nhan_vien_detail(ma_chi_nhanh, ma_nhan_vien):
+    employee = get_employee_by_id_from_branch_database_for_api(
+        ma_chi_nhanh,
+        ma_nhan_vien,
+    )
+    if not employee:
+        return jsonify({"error": "Employee not found"}), 404
+    return jsonify(mask_sensitive_employee_fields(employee, _is_admin_user()))
+
+
 @employee_api_bp.route("/nhan-vien", methods=["POST"])
 @require_auth
 def api_create_nhan_vien():
@@ -65,6 +77,19 @@ def api_create_nhan_vien():
 
     employee = create_employee_in_branch(
         _branch_code(),
+        request.get_json(silent=True) or {},
+    )
+    return jsonify(employee), 201
+
+
+@employee_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/nhan-vien", methods=["POST"])
+@require_branch_access
+def api_create_branch_nhan_vien(ma_chi_nhanh):
+    if not _can_manage_employees():
+        return jsonify({"error": "Forbidden"}), 403
+
+    employee = create_employee_in_branch(
+        ma_chi_nhanh,
         request.get_json(silent=True) or {},
     )
     return jsonify(employee), 201
@@ -86,6 +111,22 @@ def api_update_nhan_vien(ma_nhan_vien):
     return jsonify(employee)
 
 
+@employee_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>", methods=["PUT"])
+@require_branch_access
+def api_update_branch_nhan_vien(ma_chi_nhanh, ma_nhan_vien):
+    if not _can_manage_employees():
+        return jsonify({"error": "Forbidden"}), 403
+
+    employee = update_employee_in_branch(
+        ma_chi_nhanh,
+        ma_nhan_vien,
+        request.get_json(silent=True) or {},
+    )
+    if not employee:
+        return jsonify({"error": "Employee not found"}), 404
+    return jsonify(employee)
+
+
 @employee_api_bp.route("/nhan-vien/<ma_nhan_vien>", methods=["DELETE"])
 @require_auth
 def api_delete_nhan_vien(ma_nhan_vien):
@@ -93,6 +134,18 @@ def api_delete_nhan_vien(ma_nhan_vien):
         return jsonify({"error": "Forbidden"}), 403
 
     deleted = soft_delete_employee_in_branch(_branch_code(), ma_nhan_vien)
+    if not deleted:
+        return jsonify({"error": "Employee not found"}), 404
+    return jsonify({"message": "Employee disabled", "ma_nhan_vien": ma_nhan_vien})
+
+
+@employee_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/nhan-vien/<ma_nhan_vien>", methods=["DELETE"])
+@require_branch_access
+def api_delete_branch_nhan_vien(ma_chi_nhanh, ma_nhan_vien):
+    if not _can_manage_employees():
+        return jsonify({"error": "Forbidden"}), 403
+
+    deleted = soft_delete_employee_in_branch(ma_chi_nhanh, ma_nhan_vien)
     if not deleted:
         return jsonify({"error": "Employee not found"}), 404
     return jsonify({"message": "Employee disabled", "ma_nhan_vien": ma_nhan_vien})

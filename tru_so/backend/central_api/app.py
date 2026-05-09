@@ -46,6 +46,7 @@ def create_app():
     Swagger(app)
 
     @app.get("/api/ping")
+    @app.get("/api/tru-so/ping")
     def ping():
         return {"service": "central-api", "status": "ok"}
 

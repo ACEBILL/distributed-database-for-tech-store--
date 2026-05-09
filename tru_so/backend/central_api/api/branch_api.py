@@ -15,6 +15,7 @@ branch_api_bp = Blueprint("branch_api", __name__, url_prefix="/api")
 
 
 @branch_api_bp.route("/chi-nhanh")
+@branch_api_bp.route("/tru-so/chi-nhanh")
 @require_auth
 def api_chi_nhanh_list():
     """Lấy danh sách chi nhánh
@@ -46,6 +47,7 @@ def api_chi_nhanh_list():
 
 
 @branch_api_bp.route("/chi-nhanh/<ma_chi_nhanh>")
+@branch_api_bp.route("/tru-so/chi-nhanh/<ma_chi_nhanh>")
 @require_branch_access
 def api_chi_nhanh_detail(ma_chi_nhanh):
     """Lấy chi tiết chi nhánh
@@ -71,6 +73,7 @@ def api_chi_nhanh_detail(ma_chi_nhanh):
 
 
 @branch_api_bp.route("/chi-nhanh", methods=["POST"])
+@branch_api_bp.route("/tru-so/chi-nhanh", methods=["POST"])
 @require_role("admin", "giam_doc")
 def api_create_chi_nhanh():
     """Tạo chi nhánh
@@ -102,6 +105,7 @@ def api_create_chi_nhanh():
 
 
 @branch_api_bp.route("/chi-nhanh/<ma_chi_nhanh>", methods=["PUT"])
+@branch_api_bp.route("/tru-so/chi-nhanh/<ma_chi_nhanh>", methods=["PUT"])
 @require_role("admin", "giam_doc")
 def api_update_chi_nhanh(ma_chi_nhanh):
     """Cập nhật chi nhánh
@@ -134,6 +138,7 @@ def api_update_chi_nhanh(ma_chi_nhanh):
 
 
 @branch_api_bp.route("/chi-nhanh/<ma_chi_nhanh>", methods=["DELETE"])
+@branch_api_bp.route("/tru-so/chi-nhanh/<ma_chi_nhanh>", methods=["DELETE"])
 @require_role("admin", "giam_doc")
 def api_delete_chi_nhanh(ma_chi_nhanh):
     """Xóa chi nhánh

@@ -8,6 +8,7 @@ auth_api_bp = Blueprint("auth_api", __name__, url_prefix="/api/auth")
 
 
 @auth_api_bp.route("/login", methods=["POST"])
+@auth_api_bp.route("/tru-so/login", methods=["POST"])
 def api_login():
     data = request.get_json(silent=True) or {}
     result = login(data.get("ma_nhan_vien"), data.get("mat_khau"))
@@ -36,8 +37,12 @@ def api_branch_login(ma_chi_nhanh):
 
 
 @auth_api_bp.route("/me")
+@auth_api_bp.route("/tru-so/me")
 @require_auth
 def api_me():
+    if request.path.endswith("/tru-so/me") and g.current_user.get("scope") != "central":
+        return jsonify({"error": "Central access required"}), 403
+
     return jsonify(
         {
             "ma_nhan_vien": g.current_user.get("sub"),
@@ -50,3 +55,13 @@ def api_me():
             "exp": g.current_user.get("exp"),
         }
     )
+
+
+@auth_api_bp.route("/branches/<ma_chi_nhanh>/me")
+@require_auth
+def api_branch_me(ma_chi_nhanh):
+    branch_code = (g.current_user.get("branch_code") or "").upper()
+    requested_branch = (ma_chi_nhanh or "").upper()
+    if g.current_user.get("scope") == "branch" and branch_code != requested_branch:
+        return jsonify({"error": "Forbidden for this branch"}), 403
+    return api_me()

@@ -14,6 +14,7 @@ supplier_api_bp = Blueprint("supplier_api", __name__, url_prefix="/api")
 
 
 @supplier_api_bp.route("/nha-cung-cap")
+@supplier_api_bp.route("/tru-so/nha-cung-cap")
 def api_nha_cung_cap_list():
     """Lấy danh sách nhà cung cấp
     ---
@@ -37,6 +38,7 @@ def api_nha_cung_cap_list():
 
 
 @supplier_api_bp.route("/nha-cung-cap/<int:ma_ncc>")
+@supplier_api_bp.route("/tru-so/nha-cung-cap/<int:ma_ncc>")
 def api_nha_cung_cap_detail(ma_ncc):
     """Lấy chi tiết nhà cung cấp
     ---
@@ -60,6 +62,7 @@ def api_nha_cung_cap_detail(ma_ncc):
 
 
 @supplier_api_bp.route("/nha-cung-cap", methods=["POST"])
+@supplier_api_bp.route("/tru-so/nha-cung-cap", methods=["POST"])
 @require_role("admin", "giam_doc", "truong_phong")
 def api_create_nha_cung_cap():
     """Tạo nhà cung cấp
@@ -87,6 +90,7 @@ def api_create_nha_cung_cap():
 
 
 @supplier_api_bp.route("/nha-cung-cap/<int:ma_ncc>", methods=["PUT"])
+@supplier_api_bp.route("/tru-so/nha-cung-cap/<int:ma_ncc>", methods=["PUT"])
 @require_role("admin", "giam_doc", "truong_phong")
 def api_update_nha_cung_cap(ma_ncc):
     """Cập nhật nhà cung cấp
@@ -119,6 +123,7 @@ def api_update_nha_cung_cap(ma_ncc):
 
 
 @supplier_api_bp.route("/nha-cung-cap/<int:ma_ncc>", methods=["DELETE"])
+@supplier_api_bp.route("/tru-so/nha-cung-cap/<int:ma_ncc>", methods=["DELETE"])
 @require_role("admin", "giam_doc", "truong_phong")
 def api_delete_nha_cung_cap(ma_ncc):
     """Xóa nhà cung cấp
