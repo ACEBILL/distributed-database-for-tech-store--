@@ -170,8 +170,7 @@ function getRuntimePortal() {
         aliases: Array.from(new Set(["/", ...(portal.aliases || [])])),
         loginEndpoint: RUNTIME_CONFIG.loginEndpoint || portal.loginEndpoint,
         companionHref: RUNTIME_CONFIG.companionHref || portal.companionHref,
-        secondaryLinkHref:
-            RUNTIME_CONFIG.secondaryLinkHref ||
+        secondaryLinkHref: RUNTIME_CONFIG.secondaryLinkHref ||
             RUNTIME_CONFIG.companionHref ||
             portal.secondaryLinkHref,
         portalPickerHref: RUNTIME_CONFIG.portalPickerHref || "/",
@@ -241,7 +240,7 @@ function setText(id, value) {
 }
 
 function escapeHtml(value) {
-    return String(value ?? "")
+    return String(value ? ? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
@@ -341,14 +340,12 @@ function canManageEmployees() {
     if (activePortal.key === "central") {
         return (
             selectedEmployeeSource === "central" &&
-            currentUser.scope === "central" &&
-            ["admin", "giam_doc"].includes(currentUser.chuc_vu)
+            currentUser.scope === "central" && ["admin", "giam_doc"].includes(currentUser.chuc_vu)
         );
     }
 
     return (
-        currentUser.scope === "branch" &&
-        ["admin", "giam_doc", "truong_phong"].includes(currentUser.chuc_vu)
+        currentUser.scope === "branch" && ["admin", "giam_doc", "truong_phong"].includes(currentUser.chuc_vu)
     );
 }
 
@@ -606,14 +603,14 @@ function fillEmployeeForm(employee) {
     document.getElementById("employeeFormName").value = employee.ho_ten || "";
     document.getElementById("employeeFormPassword").value = "";
     document.getElementById("employeeFormDepartment").value =
-        employee.ma_phong_ban ?? "";
+        employee.ma_phong_ban ? ? "";
     document.getElementById("employeeFormRole").value = employee.chuc_vu || "nhan_vien";
-    document.getElementById("employeeFormSalary").value = employee.luong ?? "";
+    document.getElementById("employeeFormSalary").value = employee.luong ? ? "";
     document.getElementById("employeeFormPhone").value = employee.sdt || "";
     document.getElementById("employeeFormCccd").value = employee.cccd || "";
-    document.getElementById("employeeFormDays").value = employee.ma_ngay_lam ?? "";
+    document.getElementById("employeeFormDays").value = employee.ma_ngay_lam ? ? "";
     document.getElementById("employeeFormStatus").value =
-        String(employee.trang_thai ?? 1);
+        String(employee.trang_thai ? ? 1);
     document.getElementById("employeeFormStartDate").value =
         employee.ngay_bat_dau ? employee.ngay_bat_dau.slice(0, 10) : "";
     document.getElementById("employeeFormEndDate").value =
@@ -897,6 +894,7 @@ function renderEmployees(payload) {
         })
         .join("");
 }
+// tets
 
 function renderCentralInsight(health, branchProducts) {
     const productCount =
