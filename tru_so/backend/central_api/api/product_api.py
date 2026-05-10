@@ -112,7 +112,7 @@ def api_san_pham_sync_events():
 @product_api_bp.route("/tru-so/san-pham/sync-events/retry-failed", methods=["POST"])
 @require_role("admin", "giam_doc")
 def api_retry_failed_sync_events():
-    """Retry tất cả event đồng bộ đang ở trạng thái failed hoặc pending
+    """Retry tất cả event đồng bộ đang ở trạng thái failed (chưa quá 5 lần thử)
     ---
     tags:
       - Đồng bộ sản phẩm

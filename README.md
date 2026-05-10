@@ -563,7 +563,7 @@ Ghi chu:
 
 ## Cap nhat - Khanh update (2026-05-10)
 
-Ba tinh nang bo sung tai tru so (`tru_so/backend`), khong anh huong den code chi nhanh.
+Nam tinh nang bo sung tai tru so (`tru_so/backend`), khong anh huong den code chi nhanh.
 
 ### 1. Retry dong bo san pham that bai
 
@@ -657,3 +657,67 @@ Loi thuc te da sua:
 
 - `system_api.py`: them `ValueError` vao except cua `_get_with_token` - neu `SERVICE_API_URL` trong hoac sai dinh dang, `urlopen` nem `ValueError` thay vi `OSError`; neu khong bat, endpoint bi crash thay vi tra `unreachable`.
 - `product_api.py`: sua docstring `api_retry_failed_sync_events` cho dung voi logic thuc te (chi retry `failed`, khong retry `pending`).
+
+### 4. Distributed query: nhan vien tu tat ca node
+
+Bo sung truy van phan tan thuc su - goi song song den SQL Server (tru so) + MySQL (CN01) + PostgreSQL (CN02), gop ket qua thanh mot response duy nhat.
+
+```text
+GET /api/nhan-vien/tat-ca-chi-nhanh
+GET /api/tru-so/nhan-vien/tat-ca-chi-nhanh
+```
+
+Ket qua mau:
+
+```json
+{
+  "query_type": "distributed_query",
+  "total": 15,
+  "nodes": {
+    "tru_so": { "db_engine": "sqlserver", "count": 5, "data": [...] },
+    "CN01":   { "db_engine": "mysql",     "count": 6, "data": [...] },
+    "CN02":   { "db_engine": "postgresql","count": 4, "data": [...] }
+  },
+  "data": [...]
+}
+```
+
+Moi ban ghi trong `data` co them truong `source_node` (vi du `"CN01"`) va `db_engine` de biet ban ghi den tu node nao. Day la minh hoa ro rang nhat cua distributed query trong he thong nay: mot request HTTP goi 3 DBMS khac loai va gop ket qua tai tang middleware.
+
+Neu mot chi nhanh chua cau hinh hoac mat ket noi, node do duoc ghi nhan voi `"status": "not_configured"` / `"error": "..."` trong `nodes`, khong lam crash toan bo query.
+
+Yeu cau: token scope `central`. Admin/giam_doc thay day du truong (cccd, sdt, luong). Quyen thap hon duoc an cac truong nhay cam.
+
+### 5. Thong ke phan manh ngang (horizontal fragmentation)
+
+Endpoint minh hoa phan manh ngang - dem so ban ghi `san_pham` va `NHAN_VIEN` tren tung node de chung minh moi node giu phan manh rieng cua minh:
+
+```text
+GET /api/thong-ke/phan-manh
+GET /api/tru-so/thong-ke/phan-manh
+```
+
+Ket qua mau:
+
+```json
+{
+  "fragmentation_type": "horizontal",
+  "description": "Moi node luu phan manh ngang rieng cua NHAN_VIEN va san_pham. Tru so dung SQL Server, chi nhanh dung MySQL/PostgreSQL.",
+  "nodes": {
+    "tru_so": { "ten_node": "Tru so", "db_engine": "sqlserver", "so_san_pham": 20, "so_nhan_vien": 5, "status": "ok" },
+    "CN01":   { "ten_node": "Chi nhanh 1", "db_engine": "mysql", "so_san_pham": 15, "so_nhan_vien": 6, "status": "ok" },
+    "CN02":   { "ten_node": "Chi nhanh 2", "db_engine": "postgresql", "so_san_pham": 12, "so_nhan_vien": 4, "status": "ok" }
+  }
+}
+```
+
+Day la bang chung cu the ve horizontal fragmentation: cung mot loai du lieu (san_pham, NHAN_VIEN) nhung duoc phan tan va luu tren cac DBMS khac nhau (SQL Server, MySQL, PostgreSQL).
+
+### File bo sung (Khanh update - phan tan)
+
+| File | Thay doi |
+|---|---|
+| `tru_so/backend/services/employee_service.py` | Them import `has_branch_db_settings`; them ham `get_all_employees_distributed_for_api` thuc hien distributed query qua `query_branch_db()` |
+| `tru_so/backend/central_api/api/employee_api.py` | Them import `get_all_employees_distributed_for_api`; them endpoint `GET /api/nhan-vien/tat-ca-chi-nhanh` |
+| `tru_so/backend/services/branch_service.py` | Them ham `get_fragmentation_stats_for_api` dem so ban ghi tren tung node |
+| `tru_so/backend/central_api/api/stats_api.py` | Them import `get_fragmentation_stats_for_api`; them endpoint `GET /api/thong-ke/phan-manh` |

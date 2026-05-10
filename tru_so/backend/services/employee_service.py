@@ -3,6 +3,7 @@ from db import (
     execute_branch_db,
     execute_db,
     get_branch_db_engine,
+    has_branch_db_settings,
     now_sql,
     pagination_clause,
     parse_pagination,
@@ -399,3 +400,47 @@ def mask_sensitive_employee_fields(employee, is_admin=False):
 def mask_employees_list(employees, is_admin=False):
     """Ẩn thông tin nhạy cảm cho danh sách nhân viên"""
     return [mask_sensitive_employee_fields(emp, is_admin) for emp in employees]
+
+
+def get_all_employees_distributed_for_api():
+    """Distributed query: lấy nhân viên từ tất cả node (SQL Server + MySQL + PostgreSQL)."""
+    from services.branch_service import get_branches
+
+    hq_employees = query_db(EMPLOYEE_SELECT_SQL + " ORDER BY nv.ma_nhan_vien")
+    for emp in hq_employees:
+        format_employee(emp)
+        emp["source_node"] = "tru_so"
+        emp["db_engine"] = "sqlserver"
+
+    nodes = {
+        "tru_so": {
+            "db_engine": "sqlserver",
+            "count": len(hq_employees),
+            "data": hq_employees,
+        }
+    }
+    all_data = list(hq_employees)
+
+    for branch in get_branches():
+        ma = branch["ma_chi_nhanh"]
+        engine = get_branch_db_engine(ma)
+        if not has_branch_db_settings(ma):
+            nodes[ma] = {"db_engine": engine, "count": 0, "data": [], "error": "not_configured"}
+            continue
+        try:
+            employees = query_branch_db(ma, EMPLOYEE_SELECT_SQL + " ORDER BY nv.ma_nhan_vien")
+            for emp in employees:
+                format_employee(emp)
+                emp["source_node"] = ma
+                emp["db_engine"] = engine
+            nodes[ma] = {"db_engine": engine, "count": len(employees), "data": employees}
+            all_data.extend(employees)
+        except Exception as exc:
+            nodes[ma] = {"db_engine": engine, "count": 0, "data": [], "error": str(exc)}
+
+    return {
+        "query_type": "distributed_query",
+        "total": len(all_data),
+        "nodes": nodes,
+        "data": all_data,
+    }

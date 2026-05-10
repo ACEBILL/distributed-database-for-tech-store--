@@ -158,6 +158,60 @@ def get_products_by_branch_for_api(ma_chi_nhanh):
     return products
 
 
+def get_fragmentation_stats_for_api():
+    """Thống kê phân mảnh ngang: số bản ghi NHAN_VIEN và san_pham trên từng node."""
+    nodes = {}
+
+    try:
+        sp_row = query_db("SELECT COUNT(*) AS cnt FROM san_pham", fetchone=True)
+        nv_row = query_db("SELECT COUNT(*) AS cnt FROM NHAN_VIEN", fetchone=True)
+        nodes["tru_so"] = {
+            "ten_node": "Trụ sở",
+            "db_engine": "sqlserver",
+            "so_san_pham": int(sp_row["cnt"]) if sp_row else 0,
+            "so_nhan_vien": int(nv_row["cnt"]) if nv_row else 0,
+            "status": "ok",
+        }
+    except Exception as exc:
+        nodes["tru_so"] = {
+            "ten_node": "Trụ sở",
+            "db_engine": "sqlserver",
+            "so_san_pham": 0,
+            "so_nhan_vien": 0,
+            "status": "unreachable",
+            "error": str(exc),
+        }
+
+    for branch in get_branches():
+        ma = branch["ma_chi_nhanh"]
+        engine = get_branch_db_engine(ma)
+        node = {"ten_node": branch["ten_chi_nhanh"], "db_engine": engine}
+        if not has_branch_db_settings(ma):
+            node.update({"so_san_pham": 0, "so_nhan_vien": 0, "status": "not_configured"})
+            nodes[ma] = node
+            continue
+        try:
+            sp_row = query_branch_db(ma, "SELECT COUNT(*) AS cnt FROM san_pham", fetchone=True)
+            nv_row = query_branch_db(ma, "SELECT COUNT(*) AS cnt FROM NHAN_VIEN", fetchone=True)
+            node.update({
+                "so_san_pham": int(sp_row["cnt"]) if sp_row else 0,
+                "so_nhan_vien": int(nv_row["cnt"]) if nv_row else 0,
+                "status": "ok",
+            })
+        except Exception as exc:
+            node.update({"so_san_pham": 0, "so_nhan_vien": 0, "status": "unreachable", "error": str(exc)})
+        nodes[ma] = node
+
+    return {
+        "fragmentation_type": "horizontal",
+        "description": (
+            "Mỗi node lưu phân mảnh ngang riêng của NHAN_VIEN và san_pham. "
+            "Trụ sở dùng SQL Server, chi nhánh dùng MySQL/PostgreSQL."
+        ),
+        "nodes": nodes,
+    }
+
+
 def check_branch_health(ma_chi_nhanh):
     branch = get_branch_by_id(ma_chi_nhanh)
     if not branch:

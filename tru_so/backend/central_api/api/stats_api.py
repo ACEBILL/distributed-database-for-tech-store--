@@ -4,6 +4,7 @@ from middleware.auth import require_auth, require_branch_access
 from services.branch_service import (
     get_branch_analysis_for_api,
     get_branch_stats_for_api,
+    get_fragmentation_stats_for_api,
     get_products_by_branch_for_api,
 )
 from services.department_service import get_salary_stats_by_department_for_api
@@ -50,6 +51,41 @@ def api_thong_ke():
         branch_code = (g.current_user.get("branch_code") or "").upper()
         stats = [item for item in stats if item["ma_chi_nhanh"].upper() == branch_code]
     return jsonify(stats)
+
+
+@stats_api_bp.route("/thong-ke/phan-manh")
+@stats_api_bp.route("/tru-so/thong-ke/phan-manh")
+@require_auth
+def api_thong_ke_phan_manh():
+    """Thống kê phân mảnh ngang: số bản ghi trên từng node trong hệ thống phân tán
+    ---
+    tags:
+      - Thống kê
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: >
+          Số lượng san_pham và NHAN_VIEN trên từng node (trụ sở + chi nhánh).
+          Thể hiện horizontal fragmentation - mỗi node giữ phân mảnh riêng.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fragmentation_type:
+                  type: string
+                  example: horizontal
+                description:
+                  type: string
+                nodes:
+                  type: object
+      403:
+        description: Chỉ tài khoản trụ sở (scope=central) mới được truy cập
+    """
+    if g.current_user.get("scope") != "central":
+        return jsonify({"error": "Central access required"}), 403
+    return jsonify(get_fragmentation_stats_for_api())
 
 
 @stats_api_bp.route("/thong-ke/chi-nhanh")

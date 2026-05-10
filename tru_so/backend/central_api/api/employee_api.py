@@ -4,6 +4,7 @@ from middleware.auth import require_auth, require_branch_access
 from services.employee_service import (
     create_employee_in_branch,
     create_employee,
+    get_all_employees_distributed_for_api,
     get_all_employees_for_api,
     get_employee_by_id_for_api,
     get_employee_by_id_from_branch_database_for_api,
@@ -88,6 +89,49 @@ def api_nhan_vien():
     if not _is_admin_user():
         result["data"] = mask_employees_list(result["data"], False)
 
+    return jsonify(result)
+
+
+@employee_api_bp.route("/nhan-vien/tat-ca-chi-nhanh")
+@employee_api_bp.route("/tru-so/nhan-vien/tat-ca-chi-nhanh")
+@require_auth
+def api_nhan_vien_tat_ca_chi_nhanh():
+    """Distributed query: nhân viên từ tất cả node (SQL Server + MySQL + PostgreSQL)
+    ---
+    tags:
+      - Nhân viên
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: >
+          Danh sách nhân viên gộp từ tất cả node, kèm source_node và db_engine.
+          Thể hiện distributed query qua query_branch_db().
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query_type:
+                  type: string
+                  example: distributed_query
+                total:
+                  type: integer
+                nodes:
+                  type: object
+                data:
+                  type: array
+      403:
+        description: Chỉ tài khoản trụ sở (scope=central) mới được truy cập
+    """
+    if g.current_user.get("scope") != "central":
+        return jsonify({"error": "Central access required"}), 403
+    result = get_all_employees_distributed_for_api()
+    if not _is_admin_user():
+        result["data"] = mask_employees_list(result["data"], False)
+        for node_data in result.get("nodes", {}).values():
+            if isinstance(node_data.get("data"), list):
+                node_data["data"] = mask_employees_list(node_data["data"], False)
     return jsonify(result)
 
 
