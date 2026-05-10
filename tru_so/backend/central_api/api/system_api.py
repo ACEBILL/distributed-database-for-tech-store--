@@ -18,7 +18,7 @@ def _get_with_token(url):
         req = Request(url, headers={"X-Service-Token": token}, method="GET")
         with urlopen(req, timeout=5) as resp:
             return json.loads(resp.read().decode()), None
-    except (OSError, URLError, TimeoutError) as exc:
+    except (OSError, URLError, TimeoutError, ValueError) as exc:
         return None, str(exc)
 
 

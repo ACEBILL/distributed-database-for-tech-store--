@@ -641,6 +641,19 @@ Ket qua mau:
 | File | Thay doi |
 |---|---|
 | `tru_so/backend/services/product_sync_service.py` | Them hang so `MAX_RETRY_COUNT`, cot `retry_count`/`last_error`, ham `retry_failed_events`, `retry_event_by_id`, `get_pending_event_counts_per_branch`; sua logic retry chi lay `status='failed'` (tranh double-dispatch); ghi `last_error` tu cot `message` sau moi lan retry that bai |
-| `tru_so/backend/central_api/api/product_api.py` | Them 4 endpoint retry, cap nhat enum status trong doc |
-| `tru_so/backend/central_api/api/system_api.py` | File moi - blueprint `system_api_bp` voi `GET /api/system/health` |
+| `tru_so/backend/central_api/api/product_api.py` | Them 4 endpoint retry, sua docstring cho dung voi logic chi retry `failed` |
+| `tru_so/backend/central_api/api/system_api.py` | File moi - blueprint `system_api_bp` voi `GET /api/system/health`; them `ValueError` vao except de tranh crash khi `SERVICE_API_URL` chua duoc cau hinh |
 | `tru_so/backend/central_api/app.py` | Dang ky `system_api_bp` |
+
+### Ket qua kiem tra toan bo folder
+
+Kiem tra toan bo `tru_so/backend/` sau khi them code. Cac van de agent bao cao la false positive:
+
+- `product_service.py` dong 176: `params.append(ma_sp)` dung - `now_sql()` nhung truc tiep vao SQL string, khong dung `?`, nen `ma_sp` dung la tham so cuoi cho `WHERE ma_sp = ?`.
+- `get_products_by_branch_for_api()` goi khong tham so: dung thiet ke - route `GET /api/san-pham-theo-chi-nhanh` tra tat ca chi nhanh.
+- T-SQL `sys.columns` trong `_ensure_retry_columns`: hop le vi `tru_so` chi ket noi SQL Server.
+
+Loi thuc te da sua:
+
+- `system_api.py`: them `ValueError` vao except cua `_get_with_token` - neu `SERVICE_API_URL` trong hoac sai dinh dang, `urlopen` nem `ValueError` thay vi `OSError`; neu khong bat, endpoint bi crash thay vi tra `unreachable`.
+- `product_api.py`: sua docstring `api_retry_failed_sync_events` cho dung voi logic thuc te (chi retry `failed`, khong retry `pending`).
