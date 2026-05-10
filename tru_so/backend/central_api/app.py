@@ -12,6 +12,7 @@ from central_api.api.employee_api import employee_api_bp
 from central_api.api.product_api import product_api_bp
 from central_api.api.stats_api import stats_api_bp
 from central_api.api.supplier_api import supplier_api_bp
+from central_api.api.system_api import system_api_bp
 from config import Config
 from middleware.error_handler import register_error_handlers
 
@@ -89,6 +90,7 @@ def create_app():
     app.register_blueprint(product_api_bp)
     app.register_blueprint(stats_api_bp)
     app.register_blueprint(supplier_api_bp)
+    app.register_blueprint(system_api_bp)
 
     register_error_handlers(app)
     Swagger(app)

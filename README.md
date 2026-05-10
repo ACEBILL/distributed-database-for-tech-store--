@@ -560,3 +560,83 @@ Ghi chu:
 - Schema hien tai chua gan truc tiep nhan vien voi ma chi nhanh trong DB trung tam.
 - Vi vay phan `Nhan vien chi nhanh` o portal tru so dang doc truc tiep tu DB chi nhanh qua middleware, thay vi suy luan tu schema SQL Server trung tam.
 - Du lieu nhan vien trung tam va chi nhanh hien co the khac nhau ve so luong.
+
+## Cap nhat - Khanh update (2026-05-10)
+
+Ba tinh nang bo sung tai tru so (`tru_so/backend`), khong anh huong den code chi nhanh.
+
+### 1. Retry dong bo san pham that bai
+
+Bo sung hai endpoint cho phep thu lai cac event dong bo dang o trang thai `failed` hoac `pending`:
+
+| Endpoint | Mo ta |
+|---|---|
+| `POST /api/san-pham/sync-events/retry-failed` | Retry tat ca event failed/pending chua qua gioi han |
+| `POST /api/tru-so/san-pham/sync-events/retry-failed` | Alias namespace tru so |
+| `POST /api/san-pham/sync-events/<event_id>/retry` | Retry mot event cu the theo event_id |
+| `POST /api/tru-so/san-pham/sync-events/<event_id>/retry` | Alias namespace tru so |
+
+Yeu cau quyen: `admin` hoac `giam_doc`.
+
+### 2. Mo rong schema product_sync_events
+
+Them hai cot moi vao bang `product_sync_events` tai SQL Server (tu dong tao neu chua co):
+
+- `retry_count INT DEFAULT 0` - dem so lan da thu lai
+- `last_error NVARCHAR(MAX)` - luu loi cuoi cung
+
+Trang thai event duoc mo rong:
+
+```text
+pending  -> sent         (dispatch thanh cong)
+pending  -> failed       (dispatch that bai)
+failed   -> pending      (retry thu lai)
+failed   -> dead_letter  (da thu lai >= 5 lan, khong con retry)
+```
+
+### 3. Health endpoint tong hop toan he thong
+
+Endpoint moi tra trang thai tat ca node trong he thong phan tan:
+
+```text
+GET /api/system/health
+```
+
+Ket qua mau:
+
+```json
+{
+  "overall": "degraded",
+  "nodes": {
+    "tru_so": {
+      "db_engine": "sqlserver",
+      "db": "ok",
+      "service": "ok",
+      "pending_events": 0
+    },
+    "CN01": {
+      "db_engine": "mysql",
+      "db": "ok",
+      "service": "unreachable",
+      "pending_events": 3
+    },
+    "CN02": {
+      "db_engine": "postgresql",
+      "db": "ok",
+      "service": "ok",
+      "pending_events": 0
+    }
+  }
+}
+```
+
+`overall` la `ok` khi tat ca db va service deu `ok`, nguoc lai la `degraded`.
+
+### File da thay doi
+
+| File | Thay doi |
+|---|---|
+| `tru_so/backend/services/product_sync_service.py` | Them hang so `MAX_RETRY_COUNT`, cot `retry_count`/`last_error`, ham `retry_failed_events`, `retry_event_by_id`, `get_pending_event_counts_per_branch` |
+| `tru_so/backend/central_api/api/product_api.py` | Them 4 endpoint retry, cap nhat enum status trong doc |
+| `tru_so/backend/central_api/api/system_api.py` | File moi - blueprint `system_api_bp` voi `GET /api/system/health` |
+| `tru_so/backend/central_api/app.py` | Dang ky `system_api_bp` |

@@ -10,7 +10,11 @@ from services.product_service import (
     soft_delete_product,
     update_product,
 )
-from services.product_sync_service import get_product_sync_events_for_api
+from services.product_sync_service import (
+    get_product_sync_events_for_api,
+    retry_event_by_id,
+    retry_failed_events,
+)
 
 
 product_api_bp = Blueprint("product_api", __name__, url_prefix="/api")
@@ -90,7 +94,7 @@ def api_san_pham_sync_events():
         schema: {type: string}
       - name: status
         in: query
-        schema: {type: string, enum: [pending, sent, failed]}
+        schema: {type: string, enum: [pending, sent, failed, dead_letter]}
       - name: target_branch
         in: query
         schema: {type: string}
@@ -102,6 +106,51 @@ def api_san_pham_sync_events():
         description: Danh sách event đồng bộ sản phẩm
     """
     return jsonify(get_product_sync_events_for_api(request.args))
+
+
+@product_api_bp.route("/san-pham/sync-events/retry-failed", methods=["POST"])
+@product_api_bp.route("/tru-so/san-pham/sync-events/retry-failed", methods=["POST"])
+@require_role("admin", "giam_doc")
+def api_retry_failed_sync_events():
+    """Retry tất cả event đồng bộ đang ở trạng thái failed hoặc pending
+    ---
+    tags:
+      - Đồng bộ sản phẩm
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: Kết quả retry từng event
+    """
+    result = retry_failed_events()
+    return jsonify(result)
+
+
+@product_api_bp.route("/san-pham/sync-events/<event_id>/retry", methods=["POST"])
+@product_api_bp.route("/tru-so/san-pham/sync-events/<event_id>/retry", methods=["POST"])
+@require_role("admin", "giam_doc")
+def api_retry_sync_event(event_id):
+    """Retry một event đồng bộ cụ thể theo event_id
+    ---
+    tags:
+      - Đồng bộ sản phẩm
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: event_id
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Kết quả retry event
+      404:
+        description: Không tìm thấy event
+    """
+    result = retry_event_by_id(event_id)
+    if result is None:
+        return jsonify({"error": "Event not found"}), 404
+    return jsonify(result)
 
 
 @product_api_bp.route("/san-pham/<ma_sp>")

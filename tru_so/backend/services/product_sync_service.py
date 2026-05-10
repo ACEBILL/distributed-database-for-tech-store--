@@ -13,6 +13,9 @@ from db import execute_db, query_db
 SYNC_EVENT_STATUS_PENDING = "pending"
 SYNC_EVENT_STATUS_SENT = "sent"
 SYNC_EVENT_STATUS_FAILED = "failed"
+SYNC_EVENT_STATUS_DEAD_LETTER = "dead_letter"
+
+MAX_RETRY_COUNT = 5
 
 
 def ensure_product_sync_events_table():
@@ -166,6 +169,100 @@ def dispatch_product_sync_event(event):
         json.dumps(result, ensure_ascii=False, default=_json_default),
     )
     return result
+
+
+def _ensure_retry_columns():
+    execute_db(
+        """
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.columns
+            WHERE object_id = OBJECT_ID('dbo.product_sync_events') AND name = 'retry_count'
+        )
+            ALTER TABLE product_sync_events ADD retry_count INT DEFAULT 0
+        """
+    )
+    execute_db(
+        """
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.columns
+            WHERE object_id = OBJECT_ID('dbo.product_sync_events') AND name = 'last_error'
+        )
+            ALTER TABLE product_sync_events ADD last_error NVARCHAR(MAX) NULL
+        """
+    )
+
+
+def get_pending_event_counts_per_branch():
+    ensure_product_sync_events_table()
+    rows = query_db(
+        """
+        SELECT target_branch, COUNT(*) AS cnt
+        FROM product_sync_events
+        WHERE status IN ('pending', 'failed')
+        GROUP BY target_branch
+        """
+    )
+    return {row["target_branch"]: int(row["cnt"]) for row in rows}
+
+
+def _do_retry(event_id, payload, current_retry_count):
+    dispatch_product_sync_event(payload)
+    new_retry_count = current_retry_count + 1
+
+    status_row = query_db(
+        "SELECT status FROM product_sync_events WHERE event_id = ?",
+        (event_id,),
+        fetchone=True,
+    )
+    new_status = (status_row or {}).get("status", SYNC_EVENT_STATUS_FAILED)
+    if new_status == SYNC_EVENT_STATUS_FAILED and new_retry_count >= MAX_RETRY_COUNT:
+        new_status = SYNC_EVENT_STATUS_DEAD_LETTER
+
+    execute_db(
+        "UPDATE product_sync_events SET retry_count = ?, status = ? WHERE event_id = ?",
+        (new_retry_count, new_status, event_id),
+    )
+    return {"event_id": event_id, "status": new_status, "retry_count": new_retry_count}
+
+
+def retry_failed_events():
+    ensure_product_sync_events_table()
+    _ensure_retry_columns()
+
+    rows = query_db(
+        """
+        SELECT event_id, payload, COALESCE(retry_count, 0) AS retry_count
+        FROM product_sync_events
+        WHERE status IN ('failed', 'pending') AND COALESCE(retry_count, 0) < ?
+        ORDER BY version
+        """,
+        (MAX_RETRY_COUNT,),
+    )
+
+    results = []
+    for row in rows:
+        result = _do_retry(row["event_id"], json.loads(row["payload"]), int(row["retry_count"]))
+        results.append(result)
+
+    return {"retried": len(results), "results": results}
+
+
+def retry_event_by_id(event_id):
+    ensure_product_sync_events_table()
+    _ensure_retry_columns()
+
+    row = query_db(
+        "SELECT event_id, payload, status, COALESCE(retry_count, 0) AS retry_count "
+        "FROM product_sync_events WHERE event_id = ?",
+        (event_id,),
+        fetchone=True,
+    )
+    if not row:
+        return None
+    if row["status"] == SYNC_EVENT_STATUS_SENT:
+        return {"event_id": event_id, "status": "skipped", "message": "Event already sent"}
+
+    return _do_retry(event_id, json.loads(row["payload"]), int(row["retry_count"]))
 
 
 def get_product_sync_events_for_api(args=None):
