@@ -20,7 +20,7 @@ PRODUCT_BASE_SQL = """
     FROM SAN_PHAM sp
     JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
     JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
-"""
+""" #1
 
 
 def _build_product_filters(args):

@@ -114,7 +114,7 @@ def get_product_by_id_for_api(ma_sp):
     )
     return format_product(product)
 
-
+#test
 def create_product(data):
     required_fields = ["ma_sp", "ten_sp", "gia", "ma_loai_sp", "ma_ncc"]
     missing_fields = [field for field in required_fields if not data.get(field)]

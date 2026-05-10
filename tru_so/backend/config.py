@@ -21,3 +21,4 @@ class Config:
     JWT_ALGORITHM = "HS256"
     JWT_EXPIRES_HOURS = int(os.getenv("JWT_EXPIRES_HOURS", 8))
     SERVICE_TOKEN = os.getenv("SERVICE_TOKEN", "dev-service-token-change-in-production")
+#1

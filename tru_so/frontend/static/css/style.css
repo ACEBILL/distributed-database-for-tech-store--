@@ -28,9 +28,7 @@ a {
     display: grid;
     place-items: center;
     padding: 24px;
-    background:
-        linear-gradient(135deg, rgba(22, 32, 42, 0.88), rgba(25, 61, 72, 0.82)),
-        url("https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=1600&q=80") center/cover;
+    background: linear-gradient(135deg, rgba(22, 32, 42, 0.88), rgba(25, 61, 72, 0.82)), url("https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=1600&q=80") center/cover;
 }
 
 .login-panel {
@@ -442,6 +440,9 @@ a {
     font-weight: 700;
 }
 
+
+/* 1 */
+
 .field input,
 .field select {
     width: 100%;
@@ -737,52 +738,42 @@ tr:last-child td {
     .app-shell {
         grid-template-columns: 1fr;
     }
-
     .sidebar-left {
         min-height: auto;
         padding: 14px 16px;
         gap: 14px;
     }
-
     .side-nav {
         grid-template-columns: repeat(4, minmax(0, 1fr));
         overflow-x: auto;
     }
-
     .nav-item {
         justify-content: center;
         min-width: 112px;
     }
-
     .nav-submenu {
         margin-left: 0;
         padding-left: 0;
         border-left: 0;
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-
     .nav-subitem {
         min-width: 132px;
     }
-
     .sidebar-footer {
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
     }
-
     .btn-ghost {
         width: auto;
     }
-
     .pagination-bar {
         flex-direction: column;
         align-items: stretch;
     }
-
     .pagination-actions {
         justify-content: stretch;
     }
-
     .pagination-actions .btn {
         flex: 1 1 0;
     }
@@ -792,26 +783,21 @@ tr:last-child td {
     .login-shell {
         padding: 16px;
     }
-
     .portal-grid,
     .login-panel {
         grid-template-columns: 1fr;
     }
-
     .login-panel {
         min-height: 0;
     }
-
     .login-copy,
     .login-form {
         padding: 28px;
     }
-
     .portal-copy h1,
     .login-copy h1 {
         font-size: 26px;
     }
-
     .topbar {
         height: auto;
         padding: 16px;
@@ -819,20 +805,16 @@ tr:last-child td {
         gap: 12px;
         flex-direction: column;
     }
-
     .topbar-actions {
         width: 100%;
     }
-
     .topbar-actions .btn {
         flex: 1 1 0;
     }
-
     .layout {
         width: min(100% - 24px, 1180px);
         margin-top: 16px;
     }
-
     .summary-grid,
     .quick-grid,
     .form-grid {
