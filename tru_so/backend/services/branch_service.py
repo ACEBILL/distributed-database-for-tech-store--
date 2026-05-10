@@ -191,7 +191,8 @@ def get_fragmentation_stats_for_api():
             nodes[ma] = node
             continue
         try:
-            sp_row = query_branch_db(ma, "SELECT COUNT(*) AS cnt FROM san_pham", fetchone=True)
+            sp_table = "SAN_PHAM" if engine == "mysql" else "san_pham"
+            sp_row = query_branch_db(ma, f"SELECT COUNT(*) AS cnt FROM {sp_table}", fetchone=True)
             nv_row = query_branch_db(ma, "SELECT COUNT(*) AS cnt FROM NHAN_VIEN", fetchone=True)
             node.update({
                 "so_san_pham": int(sp_row["cnt"]) if sp_row else 0,
