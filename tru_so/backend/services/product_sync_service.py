@@ -210,17 +210,19 @@ def _do_retry(event_id, payload, current_retry_count):
     new_retry_count = current_retry_count + 1
 
     status_row = query_db(
-        "SELECT status FROM product_sync_events WHERE event_id = ?",
+        "SELECT status, message FROM product_sync_events WHERE event_id = ?",
         (event_id,),
         fetchone=True,
     )
     new_status = (status_row or {}).get("status", SYNC_EVENT_STATUS_FAILED)
+    last_error = (status_row or {}).get("message") if new_status == SYNC_EVENT_STATUS_FAILED else None
+
     if new_status == SYNC_EVENT_STATUS_FAILED and new_retry_count >= MAX_RETRY_COUNT:
         new_status = SYNC_EVENT_STATUS_DEAD_LETTER
 
     execute_db(
-        "UPDATE product_sync_events SET retry_count = ?, status = ? WHERE event_id = ?",
-        (new_retry_count, new_status, event_id),
+        "UPDATE product_sync_events SET retry_count = ?, status = ?, last_error = ? WHERE event_id = ?",
+        (new_retry_count, new_status, last_error, event_id),
     )
     return {"event_id": event_id, "status": new_status, "retry_count": new_retry_count}
 
@@ -233,7 +235,7 @@ def retry_failed_events():
         """
         SELECT event_id, payload, COALESCE(retry_count, 0) AS retry_count
         FROM product_sync_events
-        WHERE status IN ('failed', 'pending') AND COALESCE(retry_count, 0) < ?
+        WHERE status = 'failed' AND COALESCE(retry_count, 0) < ?
         ORDER BY version
         """,
         (MAX_RETRY_COUNT,),

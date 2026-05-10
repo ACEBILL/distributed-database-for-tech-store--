@@ -567,16 +567,16 @@ Ba tinh nang bo sung tai tru so (`tru_so/backend`), khong anh huong den code chi
 
 ### 1. Retry dong bo san pham that bai
 
-Bo sung hai endpoint cho phep thu lai cac event dong bo dang o trang thai `failed` hoac `pending`:
+Bo sung hai endpoint cho phep thu lai cac event dong bo dang o trang thai `failed`:
 
 | Endpoint | Mo ta |
 |---|---|
-| `POST /api/san-pham/sync-events/retry-failed` | Retry tat ca event failed/pending chua qua gioi han |
+| `POST /api/san-pham/sync-events/retry-failed` | Retry tat ca event `failed` chua qua gioi han 5 lan |
 | `POST /api/tru-so/san-pham/sync-events/retry-failed` | Alias namespace tru so |
 | `POST /api/san-pham/sync-events/<event_id>/retry` | Retry mot event cu the theo event_id |
 | `POST /api/tru-so/san-pham/sync-events/<event_id>/retry` | Alias namespace tru so |
 
-Yeu cau quyen: `admin` hoac `giam_doc`.
+Chi retry event co `status='failed'`, khong retry `pending` de tranh dispatch trung khi event dang duoc xu ly. Yeu cau quyen: `admin` hoac `giam_doc`.
 
 ### 2. Mo rong schema product_sync_events
 
@@ -588,11 +588,15 @@ Them hai cot moi vao bang `product_sync_events` tai SQL Server (tu dong tao neu 
 Trang thai event duoc mo rong:
 
 ```text
-pending  -> sent         (dispatch thanh cong)
-pending  -> failed       (dispatch that bai)
-failed   -> pending      (retry thu lai)
-failed   -> dead_letter  (da thu lai >= 5 lan, khong con retry)
+pending     -> sent         (dispatch thanh cong)
+pending     -> failed       (dispatch that bai)
+failed      -> sent         (retry thanh cong)
+failed      -> failed       (retry that bai, retry_count tang)
+failed      -> dead_letter  (retry_count >= 5, khong con retry)
+dead_letter -> (ket thuc)
 ```
+
+Cot `last_error` duoc ghi tu cot `message` sau moi lan retry that bai, giup truy vet nguyen nhan.
 
 ### 3. Health endpoint tong hop toan he thong
 
@@ -636,7 +640,7 @@ Ket qua mau:
 
 | File | Thay doi |
 |---|---|
-| `tru_so/backend/services/product_sync_service.py` | Them hang so `MAX_RETRY_COUNT`, cot `retry_count`/`last_error`, ham `retry_failed_events`, `retry_event_by_id`, `get_pending_event_counts_per_branch` |
+| `tru_so/backend/services/product_sync_service.py` | Them hang so `MAX_RETRY_COUNT`, cot `retry_count`/`last_error`, ham `retry_failed_events`, `retry_event_by_id`, `get_pending_event_counts_per_branch`; sua logic retry chi lay `status='failed'` (tranh double-dispatch); ghi `last_error` tu cot `message` sau moi lan retry that bai |
 | `tru_so/backend/central_api/api/product_api.py` | Them 4 endpoint retry, cap nhat enum status trong doc |
 | `tru_so/backend/central_api/api/system_api.py` | File moi - blueprint `system_api_bp` voi `GET /api/system/health` |
 | `tru_so/backend/central_api/app.py` | Dang ky `system_api_bp` |
