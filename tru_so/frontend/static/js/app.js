@@ -240,7 +240,7 @@ function setText(id, value) {
 }
 
 function escapeHtml(value) {
-    return String(value ? ? "")
+    return String(value ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
@@ -603,14 +603,14 @@ function fillEmployeeForm(employee) {
     document.getElementById("employeeFormName").value = employee.ho_ten || "";
     document.getElementById("employeeFormPassword").value = "";
     document.getElementById("employeeFormDepartment").value =
-        employee.ma_phong_ban ? ? "";
+        employee.ma_phong_ban ?? "";
     document.getElementById("employeeFormRole").value = employee.chuc_vu || "nhan_vien";
-    document.getElementById("employeeFormSalary").value = employee.luong ? ? "";
+    document.getElementById("employeeFormSalary").value = employee.luong ?? "";
     document.getElementById("employeeFormPhone").value = employee.sdt || "";
     document.getElementById("employeeFormCccd").value = employee.cccd || "";
-    document.getElementById("employeeFormDays").value = employee.ma_ngay_lam ? ? "";
+    document.getElementById("employeeFormDays").value = employee.ma_ngay_lam ?? "";
     document.getElementById("employeeFormStatus").value =
-        String(employee.trang_thai ? ? 1);
+        String(employee.trang_thai ?? 1);
     document.getElementById("employeeFormStartDate").value =
         employee.ngay_bat_dau ? employee.ngay_bat_dau.slice(0, 10) : "";
     document.getElementById("employeeFormEndDate").value =
