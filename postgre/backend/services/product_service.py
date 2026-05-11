@@ -1,4 +1,9 @@
 import json
+import os
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from flask import current_app
 
 from db import (
     build_pagination_meta,
@@ -13,6 +18,30 @@ from db import (
 from services.cache_service import delete_cache, get_cache, set_cache
 
 
+def _hq_api_url():
+    return os.getenv("HQ_API_URL", "http://tru-so-backend:5000").rstrip("/")
+
+
+def _service_token():
+    return current_app.config.get("SERVICE_TOKEN", "")
+
+
+def _hq_get(path):
+    req = Request(
+        f"{_hq_api_url()}{path}",
+        headers={"X-Service-Token": _service_token()},
+        method="GET",
+    )
+    try:
+        with urlopen(req, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HQ {exc.code}: {body}") from exc
+    except (OSError, URLError, TimeoutError) as exc:
+        raise RuntimeError(f"HQ unreachable: {exc}") from exc
+
+
 PRODUCT_CACHE_KEY = "cache:san_pham_list"
 
 
@@ -20,7 +49,7 @@ PRODUCT_BASE_SQL = """
     FROM SAN_PHAM sp
     JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
     JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
-"""
+""" #1
 
 
 def _build_product_filters(args):
@@ -179,6 +208,65 @@ def update_product(ma_sp, data):
     if affected_rows == 0:
         return None
 
+    delete_cache(PRODUCT_CACHE_KEY)
+    return get_product_by_id_for_api(ma_sp)
+
+
+def list_hq_products_not_on_branch():
+    """Liệt kê SP có ở trụ sở nhưng CHƯA có ở chi nhánh hiện tại.
+
+    Dùng cho UI "Thêm SP từ catalog trụ sở" — chỉ hiện những mã chi nhánh
+    chưa kéo về.
+    """
+    payload = _hq_get("/api/internal/products/list?only_active=1")
+    hq_products = payload.get("data") or []
+
+    local_codes = {
+        row["ma_sp"]
+        for row in query_db("SELECT ma_sp FROM SAN_PHAM")
+    }
+    available = [p for p in hq_products if p.get("ma_sp") not in local_codes]
+    return available
+
+
+def import_product_from_hq(ma_sp):
+    """Kéo 1 SP từ trụ sở về chi nhánh hiện tại.
+
+    Không phát outbox event — trụ sở đã có bản gốc, không cần đẩy ngược.
+    Lỗi nếu chi nhánh đã có ma_sp (caller nên kiểm tra trước).
+    """
+    if not ma_sp:
+        raise ValueError("ma_sp là bắt buộc")
+
+    existing = query_db("SELECT ma_sp FROM SAN_PHAM WHERE ma_sp = ?", (ma_sp,), fetchone=True)
+    if existing:
+        raise ValueError(f"Sản phẩm {ma_sp} đã tồn tại ở chi nhánh này")
+
+    payload = _hq_get(f"/api/internal/products/{ma_sp}")
+    if not payload.get("success") or not payload.get("data"):
+        raise ValueError(f"Không tìm thấy {ma_sp} ở trụ sở")
+    src = payload["data"]
+
+    execute_db(
+        """
+        INSERT INTO SAN_PHAM (
+            ma_sp, ten_sp, gia, ti_le_loi_nhuan, ti_le_giam_gia,
+            mo_ta, ma_loai_sp, ma_ncc, trang_thai
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            src["ma_sp"],
+            src["ten_sp"],
+            src.get("gia") or 0,
+            src.get("ti_le_loi_nhuan") or 0,
+            src.get("ti_le_giam_gia") or 0,
+            src.get("mo_ta"),
+            src["ma_loai_sp"],
+            src["ma_ncc"],
+            src.get("trang_thai", 1),
+        ),
+    )
     delete_cache(PRODUCT_CACHE_KEY)
     return get_product_by_id_for_api(ma_sp)
 

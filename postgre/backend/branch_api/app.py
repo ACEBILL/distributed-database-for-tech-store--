@@ -9,6 +9,7 @@ from branch_api.api.branch_api import branch_api_bp
 from branch_api.api.category_api import category_api_bp
 from branch_api.api.department_api import department_api_bp
 from branch_api.api.employee_api import employee_api_bp
+from branch_api.api.invoice_api import invoice_api_bp
 from branch_api.api.product_api import product_api_bp
 from branch_api.api.stats_api import stats_api_bp
 from branch_api.api.supplier_api import supplier_api_bp
@@ -87,6 +88,7 @@ def create_app():
     app.register_blueprint(category_api_bp)
     app.register_blueprint(department_api_bp)
     app.register_blueprint(employee_api_bp)
+    app.register_blueprint(invoice_api_bp)
     app.register_blueprint(product_api_bp)
     app.register_blueprint(stats_api_bp)
     app.register_blueprint(supplier_api_bp)

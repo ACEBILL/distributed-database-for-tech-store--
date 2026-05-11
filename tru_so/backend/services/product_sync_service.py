@@ -110,36 +110,62 @@ def update_product_sync_event_status(event_id, status, message=None):
     )
 
 
-def create_product_sync_event(event_type, product):
+def _list_branch_codes():
+    rows = query_db("SELECT ma_chi_nhanh FROM chi_nhanh ORDER BY ma_chi_nhanh")
+    return [row["ma_chi_nhanh"] for row in rows]
+
+
+def create_product_sync_event(event_type, product, exclude_branches=None):
+    """Broadcast 1 event/branch tới TẤT CẢ chi nhánh đã đăng ký.
+
+    Đổi với pattern cũ (chỉ gửi tới branch tự nhiên của product theo loai_sp),
+    bây giờ sản phẩm tạo/sửa ở trụ sở được fan-out đầy đủ.
+
+    exclude_branches: list mã CN cần bỏ qua (dùng khi forward từ branch→branch
+    để tránh gửi lại cho chính chi nhánh nguồn).
+    """
     ensure_product_sync_events_table()
-    target_branch = product.get("ma_chi_nhanh") if product else None
-    if not target_branch:
+    if not product or not product.get("ma_sp"):
         return None
 
-    version = _next_version()
-    event_id = f"evt_{_utc_now_text()}_{product['ma_sp']}"
-    payload = _event_payload(event_id, event_type, product, version)
-    payload_json = json.dumps(payload, ensure_ascii=False, default=_json_default)
+    excluded = {(b or "").upper() for b in (exclude_branches or [])}
+    branch_codes = [b for b in _list_branch_codes() if b.upper() not in excluded]
+    if not branch_codes:
+        return None
 
-    execute_db(
-        """
-        INSERT INTO product_sync_events (
-            event_id, ma_sp, event_type, target_branch, version, payload, status
+    dispatched = []
+    base_version = _next_version()
+
+    for offset, target_branch in enumerate(branch_codes):
+        version = base_version + offset
+        event_id = f"evt_{_utc_now_text()}_{product['ma_sp']}_{target_branch}"
+        product_for_branch = dict(product)
+        product_for_branch["ma_chi_nhanh"] = target_branch
+        payload = _event_payload(event_id, event_type, product_for_branch, version)
+        payload["target_branch"] = target_branch
+        payload_json = json.dumps(payload, ensure_ascii=False, default=_json_default)
+
+        execute_db(
+            """
+            INSERT INTO product_sync_events (
+                event_id, ma_sp, event_type, target_branch, version, payload, status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event_id,
+                product["ma_sp"],
+                event_type,
+                target_branch,
+                version,
+                payload_json,
+                SYNC_EVENT_STATUS_PENDING,
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            event_id,
-            product["ma_sp"],
-            event_type,
-            target_branch,
-            version,
-            payload_json,
-            SYNC_EVENT_STATUS_PENDING,
-        ),
-    )
-    dispatch_product_sync_event(payload)
-    return payload
+        dispatch_product_sync_event(payload)
+        dispatched.append(payload)
+
+    return dispatched
 
 
 def dispatch_product_sync_event(event):
@@ -289,11 +315,12 @@ def _ensure_branch_received_table():
     )
 
 
-def _branch_event_already_received(event_id):
+def _branch_event_already_applied(event_id):
+    """Idempotency: chỉ skip nếu event_id đã apply THÀNH CÔNG. Failed cũ cho phép retry."""
     _ensure_branch_received_table()
     return bool(
         query_db(
-            "SELECT event_id FROM branch_received_events WHERE event_id = ?",
+            "SELECT event_id FROM branch_received_events WHERE event_id = ? AND status = 'success'",
             (event_id,),
             fetchone=True,
         )
@@ -301,7 +328,24 @@ def _branch_event_already_received(event_id):
 
 
 def _record_branch_received(event, source_branch, status, message):
+    """Upsert: update record cũ nếu event_id đã tồn tại (cho phép retry-after-fail)."""
     _ensure_branch_received_table()
+    event_id = event.get("event_id")
+    existing = query_db(
+        "SELECT event_id FROM branch_received_events WHERE event_id = ?",
+        (event_id,),
+        fetchone=True,
+    )
+    if existing:
+        execute_db(
+            """
+            UPDATE branch_received_events
+            SET status = ?, message = ?, applied_at = GETDATE()
+            WHERE event_id = ?
+            """,
+            (status, message, event_id),
+        )
+        return
     execute_db(
         """
         INSERT INTO branch_received_events
@@ -309,7 +353,7 @@ def _record_branch_received(event, source_branch, status, message):
         VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE())
         """,
         (
-            event.get("event_id"),
+            event_id,
             event.get("event_type"),
             (event.get("data") or {}).get("ma_sp"),
             source_branch,
@@ -335,9 +379,9 @@ def _hq_insert_product(data, source_branch):
         """
         INSERT INTO SAN_PHAM (
             ma_sp, ten_sp, gia, ti_le_loi_nhuan, ti_le_giam_gia,
-            mo_ta, ma_loai_sp, ma_ncc, trang_thai, ma_chi_nhanh
+            mo_ta, ma_loai_sp, ma_ncc, trang_thai
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             data["ma_sp"],
@@ -349,7 +393,6 @@ def _hq_insert_product(data, source_branch):
             data["ma_loai_sp"],
             data["ma_ncc"],
             data.get("trang_thai", 1),
-            data.get("ma_chi_nhanh") or source_branch,
         ),
     )
 
@@ -385,7 +428,7 @@ def apply_product_from_branch(event):
         raise ValueError("Missing event fields: " + ", ".join(missing))
 
     event_id = event["event_id"]
-    if _branch_event_already_received(event_id):
+    if _branch_event_already_applied(event_id):
         return {"event_id": event_id, "status": "ignored"}
 
     event_type    = event["event_type"]
@@ -416,7 +459,40 @@ def apply_product_from_branch(event):
         raise
 
     _record_branch_received(event, source_branch, "success", "Applied from branch")
-    return {"event_id": event_id, "ma_sp": ma_sp, "status": "applied", "source_branch": source_branch}
+
+    # Fan-out tiếp tới các chi nhánh khác (loại trừ chi nhánh nguồn để tránh ping-pong)
+    forward_summary = None
+    try:
+        # Đọc lại bản ghi HQ chuẩn để fan-out (đảm bảo data đầy đủ ten_loai_sp, ma_chi_nhanh, ...)
+        hq_product = query_db(
+            """
+            SELECT sp.*, lsp.ma_chi_nhanh
+            FROM SAN_PHAM sp
+            JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
+            WHERE sp.ma_sp = ?
+            """,
+            (ma_sp,),
+            fetchone=True,
+        )
+        if hq_product:
+            forwarded = create_product_sync_event(
+                event_type, hq_product, exclude_branches=[source_branch]
+            )
+            forward_summary = {
+                "count": len(forwarded) if forwarded else 0,
+                "to": [p.get("target_branch") for p in (forwarded or [])],
+            }
+    except Exception as exc:
+        # Forward lỗi không nên fail toàn bộ apply — chỉ log
+        forward_summary = {"error": str(exc)}
+
+    return {
+        "event_id": event_id,
+        "ma_sp": ma_sp,
+        "status": "applied",
+        "source_branch": source_branch,
+        "forwarded": forward_summary,
+    }
 
 
 def get_branch_received_events_for_api(args=None):

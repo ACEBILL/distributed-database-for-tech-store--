@@ -5,6 +5,8 @@ from services.product_service import (
     create_product,
     get_product_by_id_for_api,
     get_products_from_branch_database_for_api,
+    import_product_from_hq,
+    list_hq_products_not_on_branch,
     soft_delete_product,
     update_product,
 )
@@ -172,6 +174,70 @@ def api_internal_product_sync_log():
             "data": get_product_sync_log_for_api(request.args),
         }
     )
+
+
+@product_api_bp.route("/san-pham/from-hq")
+@require_role("admin", "giam_doc", "truong_phong")
+def api_san_pham_available_from_hq():
+    """Danh sách SP có ở trụ sở nhưng chưa có ở chi nhánh này (UI picker)
+    ---
+    tags:
+      - Sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: Danh sách SP chưa nhập từ trụ sở
+      502:
+        description: Không gọi được API trụ sở
+    """
+    try:
+        return jsonify({"data": list_hq_products_not_on_branch()})
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@product_api_bp.route("/san-pham/import-from-hq", methods=["POST"])
+@require_role("admin", "giam_doc", "truong_phong")
+def api_san_pham_import_from_hq():
+    """Nhập 1 SP từ catalog trụ sở vào chi nhánh hiện tại.
+
+    KHÔNG phát outbox event — trụ sở đã có bản gốc.
+    ---
+    tags:
+      - Sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ma_sp]
+            properties:
+              ma_sp: {type: string}
+    responses:
+      201:
+        description: SP đã được nhập về chi nhánh
+      400:
+        description: SP đã tồn tại hoặc payload không hợp lệ
+      404:
+        description: Không tìm thấy SP ở trụ sở
+      502:
+        description: Không gọi được API trụ sở
+    """
+    data = request.get_json(silent=True) or {}
+    ma_sp = (data.get("ma_sp") or "").strip()
+    try:
+        product = import_product_from_hq(ma_sp)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except RuntimeError as exc:
+        msg = str(exc)
+        status = 404 if msg.startswith("HQ 404") else 502
+        return jsonify({"error": msg}), status
+    return jsonify(product), 201
 
 
 @product_api_bp.route("/san-pham", methods=["POST"])

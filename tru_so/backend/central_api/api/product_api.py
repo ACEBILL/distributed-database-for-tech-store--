@@ -1,6 +1,7 @@
 from flask import Blueprint, current_app, g, jsonify, request
 
 from middleware.auth import require_auth, require_branch_access, require_role
+from db import query_db
 from services.product_service import (
     create_product,
     get_product_by_id_for_api,
@@ -12,6 +13,7 @@ from services.product_service import (
 )
 from services.product_sync_service import (
     apply_product_from_branch,
+    create_product_sync_event,
     get_branch_received_events_for_api,
     get_product_sync_events_for_api,
     retry_event_by_id,
@@ -78,6 +80,52 @@ def api_san_pham():
             )
         )
     return jsonify(get_products_for_api(request.args))
+
+
+@product_api_bp.route("/san-pham/resync-all", methods=["POST"])
+@product_api_bp.route("/tru-so/san-pham/resync-all", methods=["POST"])
+@require_role("admin", "giam_doc")
+def api_resync_all_products_to_branches():
+    """Backfill: phát PRODUCT_UPDATED cho TẤT CẢ SP của HQ xuống mọi chi nhánh.
+
+    Hữu ích khi:
+    - Bootstrap chi nhánh mới
+    - Khôi phục sau khi DB chi nhánh bị mất dữ liệu
+    - Đồng bộ lại SP được seed trực tiếp vào HQ chứ không qua API
+    ---
+    tags:
+      - Đồng bộ sản phẩm
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: Số SP đã enqueue, số event đã dispatch
+    """
+    rows = query_db(
+        """
+        SELECT sp.*, lsp.ma_chi_nhanh, ncc.ten_NCC
+        FROM SAN_PHAM sp
+        JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
+        JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
+        ORDER BY sp.ma_sp
+        """
+    )
+    total_sp = len(rows)
+    total_events = 0
+    errors = []
+
+    for product in rows:
+        try:
+            dispatched = create_product_sync_event("PRODUCT_UPDATED", product)
+            total_events += len(dispatched or [])
+        except Exception as exc:
+            errors.append({"ma_sp": product.get("ma_sp"), "error": str(exc)})
+
+    return jsonify({
+        "products_processed": total_sp,
+        "events_dispatched": total_events,
+        "errors": errors,
+    })
 
 
 @product_api_bp.route("/san-pham/sync-events")
@@ -279,6 +327,79 @@ def api_delete_san_pham(ma_sp):
     if not deleted:
         return jsonify({"error": "Product not found"}), 404
     return jsonify({"message": "Product disabled", "ma_sp": ma_sp})
+
+
+@product_api_bp.route("/internal/products/list", methods=["GET"])
+def api_internal_products_list():
+    """API nội bộ — liệt kê toàn bộ SP của trụ sở (dùng cho chi nhánh "import from HQ").
+    ---
+    tags:
+      - Đồng bộ chi nhánh ← Trụ sở
+    parameters:
+      - name: X-Service-Token
+        in: header
+        required: true
+        schema: {type: string}
+      - name: only_active
+        in: query
+        schema: {type: integer, enum: [0, 1]}
+    responses:
+      200:
+        description: Danh sách SP đầy đủ kèm join loai_sp + NCC
+      403:
+        description: Service token không hợp lệ
+    """
+    if request.headers.get("X-Service-Token") != current_app.config.get("SERVICE_TOKEN"):
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+
+    only_active = request.args.get("only_active", "1") == "1"
+    where_clause = " WHERE sp.trang_thai = 1" if only_active else ""
+    products = query_db(
+        f"""
+        SELECT sp.ma_sp, sp.ten_sp, sp.gia, sp.ti_le_loi_nhuan, sp.ti_le_giam_gia,
+               sp.mo_ta, sp.ma_loai_sp, sp.ma_ncc, sp.trang_thai,
+               lsp.ten_loai_sp, lsp.ma_chi_nhanh, ncc.ten_NCC
+        FROM SAN_PHAM sp
+        JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
+        JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
+        {where_clause}
+        ORDER BY sp.ma_sp
+        """
+    )
+    for product in products:
+        for field in ("gia", "ti_le_loi_nhuan", "ti_le_giam_gia"):
+            if field in product and product[field] is not None:
+                product[field] = float(product[field])
+    return jsonify({"success": True, "data": products})
+
+
+@product_api_bp.route("/internal/products/<ma_sp>", methods=["GET"])
+def api_internal_product_detail(ma_sp):
+    """API nội bộ — chi tiết 1 SP của trụ sở (service-token).
+    ---
+    tags:
+      - Đồng bộ chi nhánh ← Trụ sở
+    parameters:
+      - name: X-Service-Token
+        in: header
+        required: true
+        schema: {type: string}
+      - name: ma_sp
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200: {description: Chi tiết SP}
+      403: {description: Service token không hợp lệ}
+      404: {description: Không tìm thấy SP}
+    """
+    if request.headers.get("X-Service-Token") != current_app.config.get("SERVICE_TOKEN"):
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+
+    product = get_product_by_id_for_api(ma_sp)
+    if not product:
+        return jsonify({"success": False, "message": "Product not found"}), 404
+    return jsonify({"success": True, "data": product})
 
 
 @product_api_bp.route("/internal/products/apply-change", methods=["POST"])

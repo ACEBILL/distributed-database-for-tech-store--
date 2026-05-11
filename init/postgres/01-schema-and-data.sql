@@ -78,6 +78,30 @@ CREATE INDEX IF NOT EXISTS idx_sync_log_version ON sync_log(version);
 CREATE INDEX IF NOT EXISTS idx_sync_log_status ON sync_log(status);
 CREATE INDEX IF NOT EXISTS idx_sync_log_ma_sp ON sync_log(ma_sp);
 
+CREATE TABLE IF NOT EXISTS HOA_DON (
+    ma_hd VARCHAR(20) PRIMARY KEY,
+    ngay_lap TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ma_nhan_vien VARCHAR(20) NOT NULL REFERENCES NHAN_VIEN(ma_nhan_vien),
+    ten_kh VARCHAR(100) NULL,
+    sdt_kh VARCHAR(15) NULL,
+    tong_tien NUMERIC(15, 2) NOT NULL DEFAULT 0,
+    ghi_chu TEXT NULL
+);
+
+CREATE TABLE IF NOT EXISTS CT_HOA_DON (
+    id SERIAL PRIMARY KEY,
+    ma_hd VARCHAR(20) NOT NULL REFERENCES HOA_DON(ma_hd) ON DELETE CASCADE,
+    ma_sp VARCHAR(20) NOT NULL REFERENCES SAN_PHAM(ma_sp),
+    so_luong INT NOT NULL,
+    don_gia NUMERIC(15, 2) NOT NULL,
+    thanh_tien NUMERIC(15, 2) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_hd_ngay ON HOA_DON(ngay_lap);
+CREATE INDEX IF NOT EXISTS idx_hd_nv ON HOA_DON(ma_nhan_vien);
+CREATE INDEX IF NOT EXISTS idx_cthd_hd ON CT_HOA_DON(ma_hd);
+CREATE INDEX IF NOT EXISTS idx_cthd_sp ON CT_HOA_DON(ma_sp);
+
 -- Trigger to mimic MySQL's "ON UPDATE CURRENT_TIMESTAMP" for cap_nhat_vao
 CREATE OR REPLACE FUNCTION trg_san_pham_touch_cap_nhat()
 RETURNS TRIGGER AS $$
@@ -112,14 +136,26 @@ INSERT INTO loai_sp (ma_loai_sp, ten_loai_sp, ma_chi_nhanh) VALUES
 ON CONFLICT (ma_loai_sp) DO NOTHING;
 
 INSERT INTO NCC (ma_NCC, ten_NCC) VALUES
-(1, 'Apple Việt Nam'),
-(2, 'Samsung Việt Nam'),
-(3, 'Dell Technologies'),
-(4, 'Logitech Distribution'),
-(5, 'LG Electronics'),
-(6, 'Kingston Technology'),
-(7, 'JBL / Harman'),
-(8, 'TP-Link Việt Nam')
+(1,  'Apple Việt Nam'),
+(2,  'Samsung Việt Nam'),
+(3,  'Dell Technologies'),
+(4,  'Logitech Distribution'),
+(5,  'LG Electronics'),
+(6,  'Kingston Technology'),
+(7,  'JBL / Harman'),
+(8,  'TP-Link Việt Nam'),
+(9,  'ASUS Việt Nam'),
+(10, 'Lenovo Việt Nam'),
+(11, 'HP Việt Nam'),
+(12, 'Acer Việt Nam'),
+(13, 'MSI Gaming'),
+(14, 'Xiaomi Việt Nam'),
+(15, 'Sony Vietnam'),
+(16, 'Microsoft Vietnam'),
+(17, 'Western Digital'),
+(18, 'Seagate Technology'),
+(19, 'Anker Innovations'),
+(20, 'Bose Audio Vietnam')
 ON CONFLICT (ma_NCC) DO NOTHING;
 
 -- Reset SERIAL so next inserts continue after seeded ids
@@ -165,6 +201,19 @@ ON CONFLICT (ma_nhan_vien) DO NOTHING;
 
 UPDATE phong_ban SET ma_nv = 2 WHERE ma_pb = 2;
 UPDATE phong_ban SET ma_nv = 3 WHERE ma_pb = 3;
+
+INSERT INTO HOA_DON (ma_hd, ngay_lap, ma_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) VALUES
+('HD101', '2026-04-15 11:00:00', 'NV004', 'Phạm Văn D', '0922000111',  8000000, NULL),
+('HD102', '2026-04-25 16:20:00', 'NV005', 'Hoàng Thị E', '0922000222', 13500000, 'Combo'),
+('HD103', '2026-05-04 09:45:00', 'NV004', 'Ngô Văn F',   '0922000333', 26000000, NULL)
+ON CONFLICT (ma_hd) DO NOTHING;
+
+INSERT INTO CT_HOA_DON (ma_hd, ma_sp, so_luong, don_gia, thanh_tien) VALUES
+('HD101', 'SP008', 1,  8000000,  8000000),
+('HD102', 'SP006', 1,  5500000,  5500000),
+('HD102', 'SP008', 1,  8000000,  8000000),
+('HD103', 'SP005', 1, 26000000, 26000000)
+ON CONFLICT DO NOTHING;
 
 CREATE OR REPLACE VIEW v_san_pham_theo_chi_nhanh AS
 SELECT
@@ -220,3 +269,21 @@ FROM NHAN_VIEN nv
 JOIN phong_ban pb ON nv.ma_phong_ban = pb.ma_pb
 WHERE nv.trang_thai = 1
 GROUP BY pb.ma_pb, pb.ten_pb;
+
+CREATE OR REPLACE VIEW v_doanh_thu_theo_ngay AS
+SELECT
+    DATE(hd.ngay_lap) AS ngay,
+    COUNT(DISTINCT hd.ma_hd) AS so_hoa_don,
+    SUM(hd.tong_tien)        AS tong_doanh_thu
+FROM HOA_DON hd
+GROUP BY DATE(hd.ngay_lap);
+
+CREATE OR REPLACE VIEW v_doanh_thu_theo_san_pham AS
+SELECT
+    sp.ma_sp,
+    sp.ten_sp,
+    SUM(ct.so_luong)   AS tong_so_luong,
+    SUM(ct.thanh_tien) AS tong_doanh_thu
+FROM CT_HOA_DON ct
+JOIN SAN_PHAM sp ON ct.ma_sp = sp.ma_sp
+GROUP BY sp.ma_sp, sp.ten_sp;

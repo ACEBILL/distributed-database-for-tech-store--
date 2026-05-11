@@ -5,6 +5,8 @@ from services.product_service import (
     create_product,
     get_product_by_id_for_api,
     get_products_from_branch_database_for_api,
+    import_product_from_hq,
+    list_hq_products_not_on_branch,
     soft_delete_product,
     update_product,
 )
@@ -18,7 +20,6 @@ from services.product_sync_service import (
     retry_branch_event_by_id,
     retry_branch_failed_events,
 )
-
 
 product_api_bp = Blueprint("branch_product_api", __name__, url_prefix="/api")
 
@@ -175,6 +176,70 @@ def api_internal_product_sync_log():
     )
 
 
+@product_api_bp.route("/san-pham/from-hq")
+@require_role("admin", "giam_doc", "truong_phong")
+def api_san_pham_available_from_hq():
+    """Danh sách SP có ở trụ sở nhưng chưa có ở chi nhánh này (UI picker)
+    ---
+    tags:
+      - Sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: Danh sách SP chưa nhập từ trụ sở
+      502:
+        description: Không gọi được API trụ sở
+    """
+    try:
+        return jsonify({"data": list_hq_products_not_on_branch()})
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@product_api_bp.route("/san-pham/import-from-hq", methods=["POST"])
+@require_role("admin", "giam_doc", "truong_phong")
+def api_san_pham_import_from_hq():
+    """Nhập 1 SP từ catalog trụ sở vào chi nhánh hiện tại.
+
+    KHÔNG phát outbox event — trụ sở đã có bản gốc.
+    ---
+    tags:
+      - Sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ma_sp]
+            properties:
+              ma_sp: {type: string}
+    responses:
+      201:
+        description: SP đã được nhập về chi nhánh
+      400:
+        description: SP đã tồn tại hoặc payload không hợp lệ
+      404:
+        description: Không tìm thấy SP ở trụ sở
+      502:
+        description: Không gọi được API trụ sở
+    """
+    data = request.get_json(silent=True) or {}
+    ma_sp = (data.get("ma_sp") or "").strip()
+    try:
+        product = import_product_from_hq(ma_sp)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except RuntimeError as exc:
+        msg = str(exc)
+        status = 404 if msg.startswith("HQ 404") else 502
+        return jsonify({"error": msg}), status
+    return jsonify(product), 201
+
+
 @product_api_bp.route("/san-pham", methods=["POST"])
 @require_role("admin", "giam_doc", "truong_phong")
 def api_create_san_pham():
@@ -283,7 +348,7 @@ def api_delete_san_pham(ma_sp):
 @product_api_bp.route("/san-pham/sync-events")
 @require_role("admin", "giam_doc")
 def api_branch_sync_events():
-    """Danh sách event đồng bộ sản phẩm từ chi nhánh lên trụ sở
+    """Danh sách event đồng bộ sản phẩm phát sinh từ chi nhánh lên trụ sở
     ---
     tags:
       - Đồng bộ chi nhánh → Trụ sở
@@ -301,7 +366,7 @@ def api_branch_sync_events():
         schema: {type: string}
     responses:
       200:
-        description: Danh sách outbox event từ chi nhánh lên trụ sở
+        description: Danh sách event đồng bộ từ chi nhánh lên trụ sở
     """
     return jsonify(get_branch_sync_events_for_api(request.args))
 
@@ -309,7 +374,7 @@ def api_branch_sync_events():
 @product_api_bp.route("/san-pham/sync-events/retry-failed", methods=["POST"])
 @require_role("admin", "giam_doc")
 def api_branch_retry_failed():
-    """Retry tất cả event failed lên trụ sở
+    """Retry tất cả event đồng bộ lên trụ sở đang bị failed
     ---
     tags:
       - Đồng bộ chi nhánh → Trụ sở
@@ -325,7 +390,7 @@ def api_branch_retry_failed():
 @product_api_bp.route("/san-pham/sync-events/<event_id>/retry", methods=["POST"])
 @require_role("admin", "giam_doc")
 def api_branch_retry_event(event_id):
-    """Retry một event lên trụ sở theo event_id
+    """Retry một event đồng bộ lên trụ sở theo event_id
     ---
     tags:
       - Đồng bộ chi nhánh → Trụ sở

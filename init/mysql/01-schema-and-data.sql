@@ -84,6 +84,36 @@ CREATE INDEX idx_sync_log_version ON sync_log(version);
 CREATE INDEX idx_sync_log_status ON sync_log(status);
 CREATE INDEX idx_sync_log_ma_sp ON sync_log(ma_sp);
 
+CREATE TABLE IF NOT EXISTS HOA_DON (
+    ma_hd VARCHAR(20) PRIMARY KEY,
+    ngay_lap DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ma_nhan_vien VARCHAR(20) NOT NULL,
+    ten_kh VARCHAR(100) NULL,
+    sdt_kh VARCHAR(15) NULL,
+    tong_tien DECIMAL(15, 2) NOT NULL DEFAULT 0,
+    ghi_chu TEXT NULL,
+    CONSTRAINT fk_hoa_don_nhan_vien
+        FOREIGN KEY (ma_nhan_vien) REFERENCES NHAN_VIEN(ma_nhan_vien)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS CT_HOA_DON (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    ma_hd VARCHAR(20) NOT NULL,
+    ma_sp VARCHAR(20) NOT NULL,
+    so_luong INT NOT NULL,
+    don_gia DECIMAL(15, 2) NOT NULL,
+    thanh_tien DECIMAL(15, 2) NOT NULL,
+    CONSTRAINT fk_ct_hd_hoa_don
+        FOREIGN KEY (ma_hd) REFERENCES HOA_DON(ma_hd) ON DELETE CASCADE,
+    CONSTRAINT fk_ct_hd_san_pham
+        FOREIGN KEY (ma_sp) REFERENCES SAN_PHAM(ma_sp)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE INDEX idx_hd_ngay ON HOA_DON(ngay_lap);
+CREATE INDEX idx_hd_nv ON HOA_DON(ma_nhan_vien);
+CREATE INDEX idx_cthd_hd ON CT_HOA_DON(ma_hd);
+CREATE INDEX idx_cthd_sp ON CT_HOA_DON(ma_sp);
+
 INSERT IGNORE INTO chi_nhanh (ma_chi_nhanh, ten_chi_nhanh) VALUES
 ('CN01', 'Chi nhánh Hà Nội'),
 ('CN02', 'Chi nhánh TP.HCM');
@@ -101,14 +131,26 @@ INSERT IGNORE INTO loai_sp (ma_loai_sp, ten_loai_sp, ma_chi_nhanh) VALUES
 ('LSP10', 'Thiết bị đeo', 'CN02');
 
 INSERT IGNORE INTO NCC (ma_NCC, ten_NCC) VALUES
-(1, 'Apple Việt Nam'),
-(2, 'Samsung Việt Nam'),
-(3, 'Dell Technologies'),
-(4, 'Logitech Distribution'),
-(5, 'LG Electronics'),
-(6, 'Kingston Technology'),
-(7, 'JBL / Harman'),
-(8, 'TP-Link Việt Nam');
+(1,  'Apple Việt Nam'),
+(2,  'Samsung Việt Nam'),
+(3,  'Dell Technologies'),
+(4,  'Logitech Distribution'),
+(5,  'LG Electronics'),
+(6,  'Kingston Technology'),
+(7,  'JBL / Harman'),
+(8,  'TP-Link Việt Nam'),
+(9,  'ASUS Việt Nam'),
+(10, 'Lenovo Việt Nam'),
+(11, 'HP Việt Nam'),
+(12, 'Acer Việt Nam'),
+(13, 'MSI Gaming'),
+(14, 'Xiaomi Việt Nam'),
+(15, 'Sony Vietnam'),
+(16, 'Microsoft Vietnam'),
+(17, 'Western Digital'),
+(18, 'Seagate Technology'),
+(19, 'Anker Innovations'),
+(20, 'Bose Audio Vietnam');
 
 INSERT IGNORE INTO SAN_PHAM (
     ma_sp, ten_sp, gia, ti_le_loi_nhuan, ti_le_giam_gia,
@@ -145,6 +187,17 @@ INSERT IGNORE INTO NHAN_VIEN (
 
 UPDATE phong_ban SET ma_nv = 2 WHERE ma_pb = 2;
 UPDATE phong_ban SET ma_nv = 3 WHERE ma_pb = 3;
+
+INSERT IGNORE INTO HOA_DON (ma_hd, ngay_lap, ma_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) VALUES
+('HD001', '2026-04-12 09:15:00', 'NV004', 'Nguyễn Văn A', '0911000111', 32000000, 'Mua trả góp'),
+('HD002', '2026-04-22 14:40:00', 'NV004', 'Trần Thị B',   '0911000222', 28000000, NULL),
+('HD003', '2026-05-03 10:05:00', 'NV005', 'Lê Văn C',     '0911000333', 31200000, 'Khách quen');
+
+INSERT IGNORE INTO CT_HOA_DON (ma_hd, ma_sp, so_luong, don_gia, thanh_tien) VALUES
+('HD001', 'SP001', 1, 32000000, 32000000),
+('HD002', 'SP002', 1, 28000000, 28000000),
+('HD003', 'SP004', 1, 29000000, 29000000),
+('HD003', 'SP007', 1,  2200000,  2200000);
 
 CREATE OR REPLACE VIEW v_san_pham_theo_chi_nhanh AS
 SELECT
@@ -200,3 +253,21 @@ FROM NHAN_VIEN nv
 JOIN phong_ban pb ON nv.ma_phong_ban = pb.ma_pb
 WHERE nv.trang_thai = 1
 GROUP BY pb.ma_pb, pb.ten_pb;
+
+CREATE OR REPLACE VIEW v_doanh_thu_theo_ngay AS
+SELECT
+    DATE(hd.ngay_lap) AS ngay,
+    COUNT(DISTINCT hd.ma_hd) AS so_hoa_don,
+    SUM(hd.tong_tien)        AS tong_doanh_thu
+FROM HOA_DON hd
+GROUP BY DATE(hd.ngay_lap);
+
+CREATE OR REPLACE VIEW v_doanh_thu_theo_san_pham AS
+SELECT
+    sp.ma_sp,
+    sp.ten_sp,
+    SUM(ct.so_luong)   AS tong_so_luong,
+    SUM(ct.thanh_tien) AS tong_doanh_thu
+FROM CT_HOA_DON ct
+JOIN SAN_PHAM sp ON ct.ma_sp = sp.ma_sp
+GROUP BY sp.ma_sp, sp.ten_sp;

@@ -143,14 +143,26 @@ INSERT INTO loai_sp VALUES
 -- Nhà cung cấp
 SET IDENTITY_INSERT NCC ON;
 INSERT INTO NCC (ma_NCC, ten_NCC) VALUES
-(1, N'Apple Việt Nam'),
-(2, N'Samsung Việt Nam'),
-(3, N'Dell Technologies'),
-(4, N'Logitech Distribution'),
-(5, N'LG Electronics'),
-(6, N'Kingston Technology'),
-(7, N'JBL / Harman'),
-(8, N'TP-Link Việt Nam');
+(1,  N'Apple Việt Nam'),
+(2,  N'Samsung Việt Nam'),
+(3,  N'Dell Technologies'),
+(4,  N'Logitech Distribution'),
+(5,  N'LG Electronics'),
+(6,  N'Kingston Technology'),
+(7,  N'JBL / Harman'),
+(8,  N'TP-Link Việt Nam'),
+(9,  N'ASUS Việt Nam'),
+(10, N'Lenovo Việt Nam'),
+(11, N'HP Việt Nam'),
+(12, N'Acer Việt Nam'),
+(13, N'MSI Gaming'),
+(14, N'Xiaomi Việt Nam'),
+(15, N'Sony Vietnam'),
+(16, N'Microsoft Vietnam'),
+(17, N'Western Digital'),
+(18, N'Seagate Technology'),
+(19, N'Anker Innovations'),
+(20, N'Bose Audio Vietnam');
 SET IDENTITY_INSERT NCC OFF;
 
 -- Sản phẩm (25 SP)

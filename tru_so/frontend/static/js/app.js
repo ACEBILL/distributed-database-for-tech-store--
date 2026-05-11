@@ -20,7 +20,7 @@ const PORTALS = {
         secondaryLabels: ["Trạng thái MySQL", "Sản phẩm CN01", "Portal chi nhánh"],
         secondaryLinkHref: "/mysql/cn01",
         secondaryLinkText: "Mở web CN01",
-        allowedViews: ["overviewView", "branchesView", "productsView", "employeesView"],
+        allowedViews: ["overviewView", "branchesView", "productsView", "invoicesView", "employeesView"],
     },
     cn01: {
         key: "cn01",
@@ -42,7 +42,7 @@ const PORTALS = {
         secondaryLabels: ["Trạng thái MySQL", "Phạm vi dữ liệu", "Portal trung tâm"],
         secondaryLinkHref: "/sqlserver",
         secondaryLinkText: "Mở web SQL Server",
-        allowedViews: ["overviewView", "productsView", "employeesView"],
+        allowedViews: ["overviewView", "productsView", "invoicesView", "employeesView"],
     },
     cn02: {
         key: "cn02",
@@ -64,7 +64,7 @@ const PORTALS = {
         secondaryLabels: ["Trạng thái PostgreSQL", "Phạm vi dữ liệu", "Portal trung tâm"],
         secondaryLinkHref: "/sqlserver",
         secondaryLinkText: "Mở web SQL Server",
-        allowedViews: ["overviewView", "productsView", "employeesView"],
+        allowedViews: ["overviewView", "productsView", "invoicesView", "employeesView"],
     },
 };
 
@@ -72,6 +72,7 @@ const pageTitles = {
     overviewView: "Tổng quan",
     branchesView: "Chi nhánh",
     productsView: "Sản phẩm",
+    invoicesView: "Hóa đơn",
     employeesView: "Nhân viên",
 };
 
@@ -170,7 +171,8 @@ function getRuntimePortal() {
         aliases: Array.from(new Set(["/", ...(portal.aliases || [])])),
         loginEndpoint: RUNTIME_CONFIG.loginEndpoint || portal.loginEndpoint,
         companionHref: RUNTIME_CONFIG.companionHref || portal.companionHref,
-        secondaryLinkHref: RUNTIME_CONFIG.secondaryLinkHref ||
+        secondaryLinkHref:
+            RUNTIME_CONFIG.secondaryLinkHref ||
             RUNTIME_CONFIG.companionHref ||
             portal.secondaryLinkHref,
         portalPickerHref: RUNTIME_CONFIG.portalPickerHref || "/",
@@ -340,12 +342,14 @@ function canManageEmployees() {
     if (activePortal.key === "central") {
         return (
             selectedEmployeeSource === "central" &&
-            currentUser.scope === "central" && ["admin", "giam_doc"].includes(currentUser.chuc_vu)
+            currentUser.scope === "central" &&
+            ["admin", "giam_doc"].includes(currentUser.chuc_vu)
         );
     }
 
     return (
-        currentUser.scope === "branch" && ["admin", "giam_doc", "truong_phong"].includes(currentUser.chuc_vu)
+        currentUser.scope === "branch" &&
+        ["admin", "giam_doc", "truong_phong"].includes(currentUser.chuc_vu)
     );
 }
 
@@ -545,6 +549,9 @@ function configurePortalUI() {
     document.querySelectorAll("[data-central-only]").forEach((element) => {
         element.hidden = activePortal.key !== "central";
     });
+    document.querySelectorAll("[data-branch-only]").forEach((element) => {
+        element.hidden = activePortal.key === "central";
+    });
 
     productSourcePanel.hidden = activePortal.key !== "central";
     selectedProductSource = activePortal.defaultProductSource;
@@ -713,10 +720,22 @@ function getProductSourceLabel(payload) {
     return activePortal.mainDbLabel;
 }
 
+function canManageProducts() {
+    if (!currentUser || !activePortal) return false;
+    if (activePortal.key !== "central") return false;
+    if (selectedProductSource !== "main") return false;
+    return (
+        currentUser.scope === "central" &&
+        ["admin", "giam_doc", "truong_phong"].includes(currentUser.chuc_vu)
+    );
+}
+
 function renderProducts(payload) {
     const products = payload.data || [];
     const sourceLabel = getProductSourceLabel(payload);
     const total = payload.pagination ? payload.pagination.total : products.length;
+    const canManage = canManageProducts();
+    const colCount = canManage ? 7 : 6;
 
     setText("productCount", numberFormatter.format(total));
     setText("productSource", `Nguồn: ${sourceLabel}`);
@@ -729,14 +748,29 @@ function renderProducts(payload) {
         );
     }
 
+    const actionHead = document.getElementById("productActionHead");
+    if (actionHead) actionHead.classList.toggle("hidden", !canManage);
+
     if (!products.length) {
-        renderEmpty("productRows", 6, "Chưa có dữ liệu sản phẩm.");
+        renderEmpty("productRows", colCount, "Chưa có dữ liệu sản phẩm.");
         return;
     }
 
     document.getElementById("productRows").innerHTML = products
-        .map(
-            (product) => `
+        .map((product) => {
+            const actionCell = canManage
+                ? `<td class="right">
+                        <div class="row-actions">
+                            <button class="table-btn" type="button" data-product-action="edit"
+                                data-product-id="${escapeHtml(product.ma_sp)}">Sửa</button>
+                            <button class="table-btn table-btn-danger" type="button"
+                                data-product-action="disable"
+                                data-product-id="${escapeHtml(product.ma_sp)}"
+                                ${Number(product.trang_thai) === 1 ? "" : "disabled"}>Ngưng</button>
+                        </div>
+                   </td>`
+                : "";
+            return `
                 <tr>
                     <td>${escapeHtml(product.ma_sp)}</td>
                     <td>${escapeHtml(product.ten_sp)}</td>
@@ -744,9 +778,10 @@ function renderProducts(payload) {
                     <td>${escapeHtml(product.ten_NCC)}</td>
                     <td class="right">${currencyFormatter.format(product.gia || 0)}</td>
                     <td class="right">${escapeHtml(product.ti_le_giam_gia || 0)}%</td>
+                    ${actionCell}
                 </tr>
-            `
-        )
+            `;
+        })
         .join("");
 }
 
@@ -894,7 +929,6 @@ function renderEmployees(payload) {
         })
         .join("");
 }
-// tets
 
 function renderCentralInsight(health, branchProducts) {
     const productCount =
@@ -1260,5 +1294,801 @@ employeeNextBtn.addEventListener("click", async () => {
     }
     await changeEmployeePage(1);
 });
+
+// ===== Hóa đơn =====
+
+let selectedInvoiceSource = "all";
+let invoiceItems = [];
+
+const invoiceSourceButtons = Array.from(
+    document.querySelectorAll("[data-invoice-source]")
+);
+const invoiceSourcePanel = document.getElementById("invoiceSourcePanel");
+const invoiceManageSection = document.getElementById("invoiceManageSection");
+const invoiceForm = document.getElementById("invoiceForm");
+const invoiceRows = document.getElementById("invoiceRows");
+const invoiceItemRows = document.getElementById("invoiceItemRows");
+const invoiceFormError = document.getElementById("invoiceFormError");
+const invoiceSubmitBtn = document.getElementById("invoiceSubmitBtn");
+const invoiceAddItemBtn = document.getElementById("invoiceAddItemBtn");
+const invoiceFormTotal = document.getElementById("invoiceFormTotal");
+const invoiceDetailSection = document.getElementById("invoiceDetailSection");
+const invoiceDetailRows = document.getElementById("invoiceDetailRows");
+const invoiceDetailMeta = document.getElementById("invoiceDetailMeta");
+const invoiceDetailTitle = document.getElementById("invoiceDetailTitle");
+const invoiceDetailClose = document.getElementById("invoiceDetailClose");
+
+function canCreateInvoice() {
+    if (!currentUser || !activePortal) return false;
+    if (activePortal.key === "central") return false;
+    return (
+        currentUser.scope === "branch" &&
+        ["admin", "giam_doc", "truong_phong", "pho_phong", "nhan_vien"].includes(currentUser.chuc_vu)
+    );
+}
+
+function syncInvoiceSourceButtons() {
+    invoiceSourceButtons.forEach((button) => {
+        button.classList.toggle(
+            "active",
+            button.dataset.invoiceSource === selectedInvoiceSource
+        );
+    });
+}
+
+function getInvoiceListUrl() {
+    if (activePortal.key !== "central") {
+        return "/api/hoa-don";
+    }
+    if (selectedInvoiceSource === "all") {
+        return "/api/hoa-don";
+    }
+    return `/api/chi-nhanh/${selectedInvoiceSource}/hoa-don`;
+}
+
+function getInvoiceStatsUrl() {
+    if (activePortal.key !== "central") {
+        return "/api/thong-ke/doanh-thu";
+    }
+    if (selectedInvoiceSource === "all") {
+        return "/api/thong-ke/doanh-thu";
+    }
+    return `/api/thong-ke/doanh-thu/${selectedInvoiceSource}`;
+}
+
+function getInvoiceScopeLabel() {
+    if (activePortal.key === "central") {
+        return selectedInvoiceSource === "all"
+            ? "Toàn hệ thống"
+            : selectedInvoiceSource;
+    }
+    return activePortal.branchCode;
+}
+
+function renderInvoiceStats(payload) {
+    const isAggregated = activePortal.key === "central" && selectedInvoiceSource === "all";
+    let count, revenue, scope;
+
+    if (isAggregated) {
+        count = payload?.summary?.so_hoa_don ?? 0;
+        revenue = payload?.summary?.tong_doanh_thu ?? 0;
+        const okBranches = (payload?.theo_chi_nhanh || []).filter(
+            (b) => b.branch_status === "ok"
+        ).length;
+        scope = `${okBranches} chi nhánh`;
+    } else {
+        // Branch backend nests under summary; tru_so per-branch flattens. Accept both.
+        count = payload?.summary?.so_hoa_don ?? payload?.so_hoa_don ?? 0;
+        revenue = payload?.summary?.tong_doanh_thu ?? payload?.tong_doanh_thu ?? 0;
+        scope = getInvoiceScopeLabel();
+    }
+
+    setText("invoiceCountMetric", numberFormatter.format(count));
+    setText("invoiceRevenueMetric", currencyFormatter.format(revenue || 0));
+    setText("invoiceScopeMetric", scope);
+    setText("invoiceStatsStatus", "Đã đồng bộ");
+}
+
+function renderInvoices(payload) {
+    let rows = [];
+    let total = 0;
+
+    if (Array.isArray(payload)) {
+        rows = payload;
+        total = rows.length;
+    } else if (payload && Array.isArray(payload.data)) {
+        rows = payload.data;
+        total = payload.total ?? payload.pagination?.total ?? rows.length;
+    }
+
+    setText("invoiceListStatus", `${numberFormatter.format(total)} hóa đơn`);
+
+    if (!rows.length) {
+        renderEmpty("invoiceRows", 7, "Chưa có hóa đơn.");
+        return;
+    }
+
+    invoiceRows.innerHTML = rows
+        .map((row) => {
+            const ma = escapeHtml(row.ma_chi_nhanh || (activePortal.branchCode || ""));
+            const ngay = row.ngay_lap ? new Date(row.ngay_lap).toLocaleString("vi-VN") : "";
+            const khach = row.ten_kh
+                ? `${escapeHtml(row.ten_kh)}${row.sdt_kh ? " · " + escapeHtml(row.sdt_kh) : ""}`
+                : "-";
+            return `
+                <tr>
+                    <td>${escapeHtml(row.ma_hd)}</td>
+                    <td>${ma}</td>
+                    <td>${escapeHtml(ngay)}</td>
+                    <td>${khach}</td>
+                    <td>${escapeHtml(row.ten_nhan_vien || row.ma_nhan_vien || "")}</td>
+                    <td class="right">${currencyFormatter.format(row.tong_tien || 0)}</td>
+                    <td class="right">
+                        <button class="table-btn" type="button" data-invoice-action="view"
+                            data-invoice-id="${escapeHtml(row.ma_hd)}"
+                            data-branch="${ma}">Xem</button>
+                    </td>
+                </tr>
+            `;
+        })
+        .join("");
+}
+
+async function loadInvoices() {
+    if (!activePortal) return;
+    setText("invoiceListStatus", "Đang tải");
+    setText("invoiceStatsStatus", "Đang tải");
+    setText("invoiceCountMetric", "...");
+    setText("invoiceRevenueMetric", "...");
+    setText("invoiceScopeMetric", "...");
+
+    try {
+        const [list, stats] = await Promise.all([
+            fetchJson(getInvoiceListUrl()),
+            fetchJson(getInvoiceStatsUrl()),
+        ]);
+        renderInvoices(list);
+        renderInvoiceStats(stats);
+    } catch (error) {
+        console.error(error);
+        if (error.status === 401) {
+            clearSession();
+            showLogin("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+            return;
+        }
+        setText("invoiceListStatus", "Lỗi tải dữ liệu");
+        setText("invoiceStatsStatus", "Lỗi tải dữ liệu");
+        renderEmpty("invoiceRows", 7, "Không tải được hóa đơn.");
+    }
+}
+
+function renderInvoiceItemRow(index, item) {
+    return `
+        <tr>
+            <td>
+                <input type="text" data-invoice-item-field="ma_sp" data-invoice-item-index="${index}"
+                    value="${escapeHtml(item.ma_sp)}" placeholder="SP001">
+            </td>
+            <td class="right">
+                <input type="number" min="1" step="1" data-invoice-item-field="so_luong" data-invoice-item-index="${index}"
+                    value="${escapeHtml(item.so_luong)}" style="text-align:right;width:80px;">
+            </td>
+            <td class="right">
+                <input type="number" min="0" step="1000" data-invoice-item-field="don_gia" data-invoice-item-index="${index}"
+                    value="${escapeHtml(item.don_gia)}" style="text-align:right;width:140px;">
+            </td>
+            <td class="right">${currencyFormatter.format((item.so_luong || 0) * (item.don_gia || 0))}</td>
+            <td class="right">
+                <button class="table-btn table-btn-danger" type="button" data-invoice-item-remove="${index}">Xóa</button>
+            </td>
+        </tr>
+    `;
+}
+
+function renderInvoiceItems() {
+    if (!invoiceItems.length) {
+        invoiceItemRows.innerHTML = `<tr><td class="empty" colspan="5">Chưa có sản phẩm. Bấm "+ Thêm dòng" để thêm.</td></tr>`;
+    } else {
+        invoiceItemRows.innerHTML = invoiceItems.map((it, idx) => renderInvoiceItemRow(idx, it)).join("");
+    }
+    const total = invoiceItems.reduce(
+        (sum, it) => sum + (Number(it.so_luong) || 0) * (Number(it.don_gia) || 0),
+        0
+    );
+    invoiceFormTotal.textContent = currencyFormatter.format(total);
+}
+
+function resetInvoiceForm() {
+    invoiceForm.reset();
+    invoiceItems = [];
+    invoiceFormError.textContent = "";
+    if (currentUser?.ma_nhan_vien) {
+        document.getElementById("invoiceFormEmployee").value = currentUser.ma_nhan_vien;
+    }
+    renderInvoiceItems();
+}
+
+function toggleInvoiceManageVisibility() {
+    const visible = canCreateInvoice();
+    invoiceManageSection.classList.toggle("hidden", !visible);
+    if (invoiceSourcePanel) {
+        invoiceSourcePanel.hidden = activePortal.key !== "central";
+    }
+}
+
+async function showInvoiceDetail(ma_hd, branchCode) {
+    let url;
+    if (activePortal.key === "central") {
+        url = `/api/chi-nhanh/${branchCode || selectedInvoiceSource}/hoa-don/${ma_hd}`;
+    } else {
+        url = `/api/hoa-don/${ma_hd}`;
+    }
+    try {
+        const detail = await fetchJson(url);
+        invoiceDetailSection.classList.remove("hidden");
+        invoiceDetailTitle.textContent = `Chi tiết ${detail.ma_hd}`;
+        invoiceDetailMeta.innerHTML = `
+            <div class="quick-item"><span>Chi nhánh</span><strong>${escapeHtml(detail.ma_chi_nhanh || (activePortal.branchCode || "-"))}</strong></div>
+            <div class="quick-item"><span>Ngày lập</span><strong>${escapeHtml(detail.ngay_lap ? new Date(detail.ngay_lap).toLocaleString("vi-VN") : "-")}</strong></div>
+            <div class="quick-item"><span>Nhân viên</span><strong>${escapeHtml(detail.ten_nhan_vien || detail.ma_nhan_vien || "-")}</strong></div>
+            <div class="quick-item"><span>Khách hàng</span><strong>${escapeHtml(detail.ten_kh || "Khách lẻ")}</strong></div>
+            <div class="quick-item"><span>SĐT khách</span><strong>${escapeHtml(detail.sdt_kh || "-")}</strong></div>
+            <div class="quick-item"><span>Tổng tiền</span><strong>${currencyFormatter.format(detail.tong_tien || 0)}</strong></div>
+        `;
+        const items = detail.chi_tiet || [];
+        if (!items.length) {
+            invoiceDetailRows.innerHTML = `<tr><td class="empty" colspan="5">Chưa có chi tiết.</td></tr>`;
+        } else {
+            invoiceDetailRows.innerHTML = items
+                .map(
+                    (it) => `
+                        <tr>
+                            <td>${escapeHtml(it.ma_sp)}</td>
+                            <td>${escapeHtml(it.ten_sp || "")}</td>
+                            <td class="right">${numberFormatter.format(it.so_luong || 0)}</td>
+                            <td class="right">${currencyFormatter.format(it.don_gia || 0)}</td>
+                            <td class="right">${currencyFormatter.format(it.thanh_tien || 0)}</td>
+                        </tr>
+                    `
+                )
+                .join("");
+        }
+        invoiceDetailSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) {
+        invoiceFormError.textContent = error.message || "Không tải được chi tiết.";
+    }
+}
+
+invoiceSourceButtons.forEach((button) => {
+    button.addEventListener("click", async () => {
+        if (activePortal.key !== "central") return;
+        const value = button.dataset.invoiceSource;
+        if (!value || value === selectedInvoiceSource) return;
+        selectedInvoiceSource = value;
+        syncInvoiceSourceButtons();
+        setText("invoiceSourceStatus", value === "all" ? "Tất cả chi nhánh" : value);
+        switchView("invoicesView");
+        await loadInvoices();
+    });
+});
+
+invoiceAddItemBtn.addEventListener("click", () => {
+    invoiceItems.push({ ma_sp: "", so_luong: 1, don_gia: 0 });
+    renderInvoiceItems();
+});
+
+invoiceItemRows.addEventListener("input", (event) => {
+    const target = event.target;
+    const field = target.dataset.invoiceItemField;
+    const idx = Number(target.dataset.invoiceItemIndex);
+    if (field === undefined || Number.isNaN(idx)) return;
+    if (field === "ma_sp") {
+        invoiceItems[idx].ma_sp = target.value.trim();
+    } else {
+        invoiceItems[idx][field] = Number(target.value) || 0;
+    }
+    const total = invoiceItems.reduce(
+        (sum, it) => sum + (Number(it.so_luong) || 0) * (Number(it.don_gia) || 0),
+        0
+    );
+    invoiceFormTotal.textContent = currencyFormatter.format(total);
+});
+
+invoiceItemRows.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-invoice-item-remove]");
+    if (!target) return;
+    const idx = Number(target.dataset.invoiceItemRemove);
+    if (Number.isNaN(idx)) return;
+    invoiceItems.splice(idx, 1);
+    renderInvoiceItems();
+});
+
+invoiceForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!canCreateInvoice()) return;
+    invoiceFormError.textContent = "";
+    invoiceSubmitBtn.disabled = true;
+
+    try {
+        if (!invoiceItems.length) {
+            throw new Error("Hóa đơn phải có ít nhất 1 dòng.");
+        }
+        const payload = {
+            ma_hd: document.getElementById("invoiceFormCode").value.trim(),
+            ma_nhan_vien: document.getElementById("invoiceFormEmployee").value.trim(),
+            ten_kh: document.getElementById("invoiceFormCustomerName").value.trim() || null,
+            sdt_kh: document.getElementById("invoiceFormCustomerPhone").value.trim() || null,
+            ghi_chu: document.getElementById("invoiceFormNote").value.trim() || null,
+            items: invoiceItems.map((it) => ({
+                ma_sp: String(it.ma_sp || "").trim(),
+                so_luong: Number(it.so_luong) || 0,
+                don_gia: Number(it.don_gia) || 0,
+            })),
+        };
+        await fetchJson("/api/hoa-don", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+        resetInvoiceForm();
+        await loadInvoices();
+        setText("invoiceListStatus", "Đã thêm hóa đơn mới");
+    } catch (error) {
+        invoiceFormError.textContent = error.message || "Không lưu được hóa đơn.";
+    } finally {
+        invoiceSubmitBtn.disabled = false;
+    }
+});
+
+invoiceRows.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-invoice-action='view']");
+    if (!button) return;
+    const ma_hd = button.dataset.invoiceId;
+    const branch = button.dataset.branch;
+    showInvoiceDetail(ma_hd, branch);
+});
+
+invoiceDetailClose.addEventListener("click", () => {
+    invoiceDetailSection.classList.add("hidden");
+});
+
+async function loadOverviewRevenue() {
+    if (!activePortal) return;
+    setText("overviewRevenueStatus", "Đang tải");
+    setText("overviewInvoiceCount", "...");
+    setText("overviewRevenueTotal", "...");
+    setText("overviewRevenueExtra", "...");
+
+    try {
+        const stats = await fetchJson("/api/thong-ke/doanh-thu");
+        renderOverviewRevenue(stats);
+    } catch (error) {
+        console.error(error);
+        if (error.status === 401) {
+            clearSession();
+            showLogin("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+            return;
+        }
+        setText("overviewRevenueStatus", "Lỗi tải dữ liệu");
+    }
+}
+
+function renderOverviewRevenue(stats) {
+    if (!activePortal) return;
+    const isCentral = activePortal.key === "central";
+
+    // Branch backend nests in `summary`; tru_so aggregated also uses `summary`.
+    const summary = stats?.summary || stats || {};
+    const count = summary.so_hoa_don ?? 0;
+    const revenue = summary.tong_doanh_thu ?? 0;
+
+    setText("overviewInvoiceCount", numberFormatter.format(count));
+    setText("overviewRevenueTotal", currencyFormatter.format(revenue || 0));
+
+    if (isCentral) {
+        const branches = stats?.theo_chi_nhanh || [];
+        const top = branches.reduce(
+            (best, b) =>
+                b.branch_status === "ok" &&
+                (best === null || b.tong_doanh_thu > best.tong_doanh_thu)
+                    ? b
+                    : best,
+            null
+        );
+        setText("overviewRevenueExtraLabel", "Chi nhánh dẫn đầu");
+        setText(
+            "overviewRevenueExtra",
+            top
+                ? `${top.ma_chi_nhanh} · ${currencyFormatter.format(top.tong_doanh_thu)}`
+                : "Chưa có"
+        );
+
+        const tbody = document.getElementById("overviewBranchRevenueRows");
+        if (tbody) {
+            if (!branches.length) {
+                tbody.innerHTML = `<tr><td class="empty" colspan="5">Chưa có dữ liệu chi nhánh.</td></tr>`;
+            } else {
+                tbody.innerHTML = branches
+                    .map((b) => {
+                        const statusType = b.branch_status === "ok" ? "ok" : "warn";
+                        return `
+                            <tr>
+                                <td>${escapeHtml(b.ma_chi_nhanh)} · ${escapeHtml(b.ten_chi_nhanh || "")}</td>
+                                <td>${badge(formatEngine(b.engine), "muted")}</td>
+                                <td>${badge(formatHealthStatus(b.branch_status), statusType)}</td>
+                                <td class="right">${numberFormatter.format(b.so_hoa_don || 0)}</td>
+                                <td class="right">${currencyFormatter.format(b.tong_doanh_thu || 0)}</td>
+                            </tr>
+                        `;
+                    })
+                    .join("");
+            }
+        }
+    } else {
+        const days = stats?.theo_ngay || [];
+        const best = days.reduce(
+            (a, b) => (a === null || b.tong_doanh_thu > a.tong_doanh_thu ? b : a),
+            null
+        );
+        setText("overviewRevenueExtraLabel", "Ngày bán tốt nhất");
+        setText(
+            "overviewRevenueExtra",
+            best && best.tong_doanh_thu
+                ? `${best.ngay} · ${currencyFormatter.format(best.tong_doanh_thu)}`
+                : "Chưa có"
+        );
+    }
+
+    setText("overviewRevenueStatus", "Đã đồng bộ");
+}
+
+// Hook into existing app lifecycle
+const _originalConfigurePortalUI = configurePortalUI;
+configurePortalUI = function () {
+    _originalConfigurePortalUI();
+    selectedInvoiceSource = "all";
+    syncInvoiceSourceButtons();
+    toggleInvoiceManageVisibility();
+    renderInvoiceItems();
+    if (invoiceSourcePanel) {
+        invoiceSourcePanel.hidden = activePortal.key !== "central";
+    }
+};
+
+const _originalShowApp = showApp;
+showApp = function (user) {
+    _originalShowApp(user);
+    resetInvoiceForm();
+    toggleInvoiceManageVisibility();
+};
+
+const _originalLoadCentralData = loadCentralData;
+loadCentralData = async function () {
+    await _originalLoadCentralData();
+    await Promise.all([loadInvoices(), loadOverviewRevenue()]);
+};
+
+const _originalLoadBranchData = loadBranchData;
+loadBranchData = async function () {
+    await _originalLoadBranchData();
+    await Promise.all([loadInvoices(), loadOverviewRevenue()]);
+};
+
+// ===== Quản lý sản phẩm (chỉ trụ sở, nguồn main) =====
+
+let productFormMode = "create";
+let productEditingCode = null;
+let productCategoriesCache = null;
+let productSuppliersCache = null;
+
+const productManageSection = document.getElementById("productManageSection");
+const productForm = document.getElementById("productForm");
+const productFormTitle = document.getElementById("productFormTitle");
+const productFormError = document.getElementById("productFormError");
+const productSubmitBtn = document.getElementById("productSubmitBtn");
+const productNewBtn = document.getElementById("productNewBtn");
+const productCancelBtn = document.getElementById("productCancelBtn");
+const productSyncStatus = document.getElementById("productSyncStatus");
+const productRowsEl = document.getElementById("productRows");
+
+function _setOptions(selectEl, items, valueKey, labelKey) {
+    if (!selectEl) return;
+    const current = selectEl.value;
+    selectEl.innerHTML = items
+        .map((it) => `<option value="${escapeHtml(it[valueKey])}">${escapeHtml(it[labelKey])} (${escapeHtml(it[valueKey])})</option>`)
+        .join("");
+    if (current) selectEl.value = current;
+}
+
+async function loadProductFormDropdowns() {
+    if (!activePortal || activePortal.key !== "central") return;
+    if (productCategoriesCache && productSuppliersCache) return;
+    try {
+        const [cats, sups] = await Promise.all([
+            fetchJson("/api/loai-san-pham"),
+            fetchJson("/api/nha-cung-cap"),
+        ]);
+        productCategoriesCache = (cats?.data || cats || []);
+        productSuppliersCache = (sups?.data || sups || []);
+        _setOptions(
+            document.getElementById("productFormCategory"),
+            productCategoriesCache,
+            "ma_loai_sp",
+            "ten_loai_sp"
+        );
+        _setOptions(
+            document.getElementById("productFormSupplier"),
+            productSuppliersCache,
+            "ma_ncc",
+            "ten_ncc"
+        );
+    } catch (error) {
+        console.error("Failed to load product dropdowns", error);
+    }
+}
+
+function resetProductForm() {
+    if (!productForm) return;
+    productForm.reset();
+    productFormMode = "create";
+    productEditingCode = null;
+    productFormTitle.textContent = "Thêm sản phẩm mới";
+    productSubmitBtn.textContent = "Lưu sản phẩm";
+    productFormError.textContent = "";
+    productSyncStatus.innerHTML = "";
+    const codeInput = document.getElementById("productFormCode");
+    if (codeInput) codeInput.disabled = false;
+    document.getElementById("productFormStatus").value = "1";
+    productCancelBtn.classList.add("hidden");
+}
+
+function fillProductForm(product) {
+    productFormMode = "edit";
+    productEditingCode = product.ma_sp;
+    productFormTitle.textContent = `Cập nhật ${product.ma_sp}`;
+    productSubmitBtn.textContent = "Cập nhật sản phẩm";
+    productFormError.textContent = "";
+    productSyncStatus.innerHTML = "";
+    productCancelBtn.classList.remove("hidden");
+
+    const codeInput = document.getElementById("productFormCode");
+    codeInput.value = product.ma_sp || "";
+    codeInput.disabled = true;
+    document.getElementById("productFormName").value = product.ten_sp || "";
+    document.getElementById("productFormPrice").value = product.gia ?? "";
+    document.getElementById("productFormCategory").value = product.ma_loai_sp || "";
+    document.getElementById("productFormSupplier").value = product.ma_ncc ?? "";
+    document.getElementById("productFormProfit").value = product.ti_le_loi_nhuan ?? "";
+    document.getElementById("productFormDiscount").value = product.ti_le_giam_gia ?? "";
+    document.getElementById("productFormStatus").value = String(product.trang_thai ?? 1);
+    document.getElementById("productFormDesc").value = product.mo_ta || "";
+
+    productManageSection.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function collectProductPayload() {
+    const get = (id) => document.getElementById(id).value.trim();
+    const payload = {
+        ten_sp: get("productFormName"),
+        gia: Number(get("productFormPrice")),
+        ma_loai_sp: get("productFormCategory"),
+        ma_ncc: Number(get("productFormSupplier")),
+        ti_le_loi_nhuan: Number(get("productFormProfit") || 0),
+        ti_le_giam_gia: Number(get("productFormDiscount") || 0),
+        mo_ta: get("productFormDesc") || null,
+        trang_thai: Number(get("productFormStatus") || "1"),
+    };
+    if (productFormMode === "create") {
+        payload.ma_sp = get("productFormCode");
+        if (!payload.ma_sp) throw new Error("Mã sản phẩm là bắt buộc.");
+    }
+    if (!payload.ten_sp) throw new Error("Tên sản phẩm là bắt buộc.");
+    if (!payload.gia || payload.gia <= 0) throw new Error("Giá phải > 0.");
+    if (!payload.ma_loai_sp) throw new Error("Loại sản phẩm là bắt buộc.");
+    if (!payload.ma_ncc) throw new Error("Nhà cung cấp là bắt buộc.");
+    return payload;
+}
+
+function renderProductSyncStatus(action, ma_sp) {
+    productSyncStatus.innerHTML = `
+        <div class="quick-item">
+            <span>Đã ${action} ${escapeHtml(ma_sp)}</span>
+            <strong>Đang đẩy dữ liệu xuống CN01 + CN02...</strong>
+        </div>
+    `;
+}
+
+function toggleProductManageVisibility() {
+    const visible = canManageProducts();
+    if (productManageSection) {
+        productManageSection.classList.toggle("hidden", !visible);
+    }
+}
+
+async function submitProductForm(event) {
+    event.preventDefault();
+    if (!canManageProducts()) return;
+    productFormError.textContent = "";
+    productSubmitBtn.disabled = true;
+
+    try {
+        const payload = collectProductPayload();
+        const isCreate = productFormMode === "create";
+        const url = isCreate ? "/api/san-pham" : `/api/san-pham/${encodeURIComponent(productEditingCode)}`;
+        const method = isCreate ? "POST" : "PUT";
+        const saved = await fetchJson(url, {
+            method,
+            body: JSON.stringify(payload),
+        });
+        const ma_sp = saved.ma_sp || payload.ma_sp || productEditingCode;
+        renderProductSyncStatus(isCreate ? "tạo" : "cập nhật", ma_sp);
+        resetProductForm();
+        await loadData();
+    } catch (error) {
+        productFormError.textContent = error.message || "Không lưu được sản phẩm.";
+    } finally {
+        productSubmitBtn.disabled = false;
+    }
+}
+
+async function handleProductRowClick(event) {
+    const button = event.target.closest("[data-product-action]");
+    if (!button || !canManageProducts()) return;
+    const ma_sp = button.dataset.productId;
+    const action = button.dataset.productAction;
+    if (!ma_sp) return;
+
+    if (action === "edit") {
+        try {
+            const product = await fetchJson(`/api/san-pham/${encodeURIComponent(ma_sp)}`);
+            await loadProductFormDropdowns();
+            fillProductForm(product);
+        } catch (error) {
+            productFormError.textContent = error.message || "Không tải được sản phẩm.";
+        }
+        return;
+    }
+
+    if (action === "disable") {
+        if (!window.confirm(`Ngưng bán sản phẩm ${ma_sp}? Thay đổi sẽ đẩy xuống cả CN01 và CN02.`)) return;
+        try {
+            await fetchJson(`/api/san-pham/${encodeURIComponent(ma_sp)}`, { method: "DELETE" });
+            renderProductSyncStatus("ngưng", ma_sp);
+            if (productEditingCode === ma_sp) resetProductForm();
+            await loadData();
+        } catch (error) {
+            productFormError.textContent = error.message || "Không ngưng được sản phẩm.";
+        }
+    }
+}
+
+if (productForm) productForm.addEventListener("submit", submitProductForm);
+if (productNewBtn) productNewBtn.addEventListener("click", async () => {
+    resetProductForm();
+    await loadProductFormDropdowns();
+    switchView("productsView");
+});
+if (productCancelBtn) productCancelBtn.addEventListener("click", () => resetProductForm());
+if (productRowsEl) productRowsEl.addEventListener("click", handleProductRowClick);
+
+// Hook product source changes to toggle manage visibility
+productSourceButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+        // selectedProductSource is updated by the prior listener; defer to next tick
+        setTimeout(() => {
+            toggleProductManageVisibility();
+            if (canManageProducts()) loadProductFormDropdowns();
+        }, 0);
+    });
+});
+
+const _originalConfigurePortalUI_Products = configurePortalUI;
+configurePortalUI = function () {
+    _originalConfigurePortalUI_Products();
+    resetProductForm();
+    toggleProductManageVisibility();
+    if (canManageProducts()) loadProductFormDropdowns();
+};
+
+const _originalShowApp_Products = showApp;
+showApp = function (user) {
+    _originalShowApp_Products(user);
+    toggleProductManageVisibility();
+    if (canManageProducts()) loadProductFormDropdowns();
+};
+
+// ===== Branch: import SP từ catalog trụ sở =====
+
+const productImportSection = document.getElementById("productImportSection");
+const productImportRows = document.getElementById("productImportRows");
+const productImportStatus = document.getElementById("productImportStatus");
+const productImportRefreshBtn = document.getElementById("productImportRefreshBtn");
+
+function canImportFromHQ() {
+    if (!currentUser || !activePortal) return false;
+    if (activePortal.key === "central") return false;
+    return (
+        currentUser.scope === "branch" &&
+        ["admin", "giam_doc", "truong_phong"].includes(currentUser.chuc_vu)
+    );
+}
+
+async function loadProductImportCatalog() {
+    if (!productImportSection || !canImportFromHQ()) return;
+    productImportSection.classList.remove("hidden");
+    productImportStatus.textContent = "Đang tải catalog từ trụ sở...";
+    try {
+        const payload = await fetchJson("/api/san-pham/from-hq");
+        const products = payload?.data || [];
+        if (!products.length) {
+            productImportRows.innerHTML = `<tr><td class="empty" colspan="6">Chi nhánh đã có đủ SP từ trụ sở.</td></tr>`;
+            productImportStatus.textContent = `Đã đồng bộ — không có SP nào cần nhập.`;
+            return;
+        }
+        productImportRows.innerHTML = products
+            .map(
+                (p) => `
+                    <tr>
+                        <td>${escapeHtml(p.ma_sp)}</td>
+                        <td>${escapeHtml(p.ten_sp)}</td>
+                        <td>${escapeHtml(p.ten_loai_sp || p.ma_loai_sp || "")}</td>
+                        <td>${escapeHtml(p.ten_NCC || p.ten_ncc || ("NCC " + (p.ma_ncc || "")))}</td>
+                        <td class="right">${currencyFormatter.format(p.gia || 0)}</td>
+                        <td class="right">
+                            <button class="table-btn" type="button"
+                                data-import-action="add"
+                                data-import-id="${escapeHtml(p.ma_sp)}">Nhập</button>
+                        </td>
+                    </tr>
+                `
+            )
+            .join("");
+        productImportStatus.textContent = `${products.length} SP có thể nhập về.`;
+    } catch (error) {
+        productImportRows.innerHTML = `<tr><td class="empty" colspan="6">Không tải được catalog trụ sở.</td></tr>`;
+        productImportStatus.textContent = error.message || "Không tải được catalog.";
+    }
+}
+
+async function handleImportClick(event) {
+    const button = event.target.closest("[data-import-action='add']");
+    if (!button || !canImportFromHQ()) return;
+    const ma_sp = button.dataset.importId;
+    if (!ma_sp) return;
+    button.disabled = true;
+    productImportStatus.textContent = `Đang nhập ${ma_sp}...`;
+    try {
+        const imported = await fetchJson("/api/san-pham/import-from-hq", {
+            method: "POST",
+            body: JSON.stringify({ ma_sp }),
+        });
+        productImportStatus.textContent = `Đã nhập ${imported.ma_sp} · ${imported.ten_sp}`;
+        await Promise.all([loadProductImportCatalog(), loadData()]);
+    } catch (error) {
+        productImportStatus.textContent = error.message || `Không nhập được ${ma_sp}.`;
+        button.disabled = false;
+    }
+}
+
+function toggleProductImportVisibility() {
+    if (!productImportSection) return;
+    const visible = canImportFromHQ();
+    productImportSection.classList.toggle("hidden", !visible);
+    if (visible) loadProductImportCatalog();
+}
+
+if (productImportRows) productImportRows.addEventListener("click", handleImportClick);
+if (productImportRefreshBtn) productImportRefreshBtn.addEventListener("click", loadProductImportCatalog);
+
+const _originalConfigurePortalUI_Import = configurePortalUI;
+configurePortalUI = function () {
+    _originalConfigurePortalUI_Import();
+    toggleProductImportVisibility();
+};
+
+const _originalShowApp_Import = showApp;
+showApp = function (user) {
+    _originalShowApp_Import(user);
+    toggleProductImportVisibility();
+};
 
 restoreSession();

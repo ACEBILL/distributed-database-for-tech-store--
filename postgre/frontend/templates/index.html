@@ -89,6 +89,10 @@
                     <span class="nav-icon">□</span>
                     <span>Sản phẩm</span>
                 </button>
+                <button class="nav-item" type="button" data-view="invoicesView">
+                    <span class="nav-icon">₫</span>
+                    <span>Hóa đơn</span>
+                </button>
                 <button class="nav-item" type="button" data-view="employeesView">
                     <span class="nav-icon">◉</span>
                     <span>Nhân viên</span>
@@ -173,6 +177,41 @@
                         </div>
                     </section>
 
+                    <section id="overviewRevenueSection" class="section">
+                        <div class="section-header">
+                            <h1 id="overviewRevenueTitle">Doanh thu hóa đơn</h1>
+                            <span class="status" id="overviewRevenueStatus">Đang tải</span>
+                        </div>
+                        <div class="summary-grid">
+                            <button class="metric metric-link" type="button" data-shortcut-view="invoicesView">
+                                <span class="metric-label">Số hóa đơn</span>
+                                <strong id="overviewInvoiceCount">...</strong>
+                            </button>
+                            <button class="metric metric-link" type="button" data-shortcut-view="invoicesView">
+                                <span class="metric-label">Tổng doanh thu</span>
+                                <strong id="overviewRevenueTotal">...</strong>
+                            </button>
+                            <div class="metric">
+                                <span class="metric-label" id="overviewRevenueExtraLabel">Ngày bán tốt nhất</span>
+                                <strong id="overviewRevenueExtra">...</strong>
+                            </div>
+                        </div>
+                        <div class="table-wrap" id="overviewBranchRevenueWrap" data-central-only style="margin-top: 16px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Chi nhánh</th>
+                                        <th>Hệ CSDL</th>
+                                        <th>Trạng thái</th>
+                                        <th class="right">Số HĐ</th>
+                                        <th class="right">Doanh thu</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="overviewBranchRevenueRows"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
                     <section id="secondaryInsightSection" class="section">
                         <div class="section-header">
                             <h1 id="secondaryInsightTitle">Theo dõi chi nhánh</h1>
@@ -236,6 +275,93 @@
                         </div>
                     </section>
 
+                    <section id="productImportSection" class="section hidden" data-branch-only>
+                        <div class="section-header">
+                            <h1>Thêm sản phẩm từ trụ sở</h1>
+                            <div class="topbar-actions">
+                                <button id="productImportRefreshBtn" class="btn" type="button">Tải lại catalog</button>
+                            </div>
+                        </div>
+                        <p class="muted" style="margin-top: -8px;">
+                            Hiển thị các SP có ở trụ sở nhưng chưa có ở chi nhánh. Bấm "Nhập" để kéo về chi nhánh hiện tại
+                            (không phát event ngược lại trụ sở).
+                        </p>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Mã SP</th>
+                                        <th>Tên sản phẩm</th>
+                                        <th>Loại</th>
+                                        <th>Nhà cung cấp</th>
+                                        <th class="right">Giá HQ</th>
+                                        <th class="right">Thao tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="productImportRows"></tbody>
+                            </table>
+                        </div>
+                        <div id="productImportStatus" class="form-error compact-error" role="alert"></div>
+                    </section>
+
+                    <section id="productManageSection" class="section hidden" data-central-only>
+                        <div class="section-header">
+                            <h1 id="productFormTitle">Quản lý sản phẩm</h1>
+                            <div class="topbar-actions">
+                                <button id="productNewBtn" class="btn" type="button">Thêm mới</button>
+                                <button id="productCancelBtn" class="btn hidden" type="button">Hủy</button>
+                            </div>
+                        </div>
+                        <form id="productForm" class="employee-form">
+                            <div class="form-grid">
+                                <label class="field">
+                                    <span>Mã sản phẩm</span>
+                                    <input id="productFormCode" name="ma_sp" type="text" required>
+                                </label>
+                                <label class="field">
+                                    <span>Tên sản phẩm</span>
+                                    <input id="productFormName" name="ten_sp" type="text" required>
+                                </label>
+                                <label class="field">
+                                    <span>Giá gốc (₫)</span>
+                                    <input id="productFormPrice" name="gia" type="number" min="0" step="1000" required>
+                                </label>
+                                <label class="field">
+                                    <span>Loại sản phẩm</span>
+                                    <select id="productFormCategory" name="ma_loai_sp" required></select>
+                                </label>
+                                <label class="field">
+                                    <span>Nhà cung cấp</span>
+                                    <select id="productFormSupplier" name="ma_ncc" required></select>
+                                </label>
+                                <label class="field">
+                                    <span>Tỉ lệ lợi nhuận (%)</span>
+                                    <input id="productFormProfit" name="ti_le_loi_nhuan" type="number" min="0" max="100" step="0.01">
+                                </label>
+                                <label class="field">
+                                    <span>Tỉ lệ giảm giá (%)</span>
+                                    <input id="productFormDiscount" name="ti_le_giam_gia" type="number" min="0" max="100" step="0.01">
+                                </label>
+                                <label class="field">
+                                    <span>Trạng thái</span>
+                                    <select id="productFormStatus" name="trang_thai">
+                                        <option value="1">Đang bán</option>
+                                        <option value="0">Ngừng bán</option>
+                                    </select>
+                                </label>
+                                <label class="field" style="grid-column: 1 / -1;">
+                                    <span>Mô tả</span>
+                                    <input id="productFormDesc" name="mo_ta" type="text">
+                                </label>
+                            </div>
+                            <div class="stack-actions">
+                                <button id="productSubmitBtn" class="btn btn-primary compact-btn" type="submit">Lưu sản phẩm</button>
+                                <div id="productFormError" class="form-error compact-error" role="alert"></div>
+                            </div>
+                        </form>
+                        <div id="productSyncStatus" class="quick-grid" style="margin-top: 8px;"></div>
+                    </section>
+
                     <section class="section">
                         <div class="section-header">
                             <h1>Sản phẩm</h1>
@@ -251,9 +377,154 @@
                                         <th>Nhà cung cấp</th>
                                         <th class="right">Giá</th>
                                         <th class="right">Giảm giá</th>
+                                        <th id="productActionHead" class="right hidden">Thao tác</th>
                                     </tr>
                                 </thead>
                                 <tbody id="productRows"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                </section>
+
+                <section id="invoicesView" class="view-panel">
+                    <section id="invoiceSourcePanel" class="section source-panel" data-central-only>
+                        <div class="section-header">
+                            <h1>Nguồn dữ liệu hóa đơn</h1>
+                            <span class="status" id="invoiceSourceStatus">Tất cả chi nhánh</span>
+                        </div>
+                        <div class="source-actions">
+                            <button class="source-btn active" type="button" data-invoice-source="all">
+                                Tất cả chi nhánh
+                            </button>
+                            <button class="source-btn" type="button" data-invoice-source="CN01">
+                                CN01 - MySQL
+                            </button>
+                            <button class="source-btn" type="button" data-invoice-source="CN02">
+                                CN02 - PostgreSQL
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="section">
+                        <div class="section-header">
+                            <h1>Doanh thu</h1>
+                            <span class="status" id="invoiceStatsStatus">Đang tải</span>
+                        </div>
+                        <div class="summary-grid">
+                            <div class="metric">
+                                <span class="metric-label">Số hóa đơn</span>
+                                <strong id="invoiceCountMetric">...</strong>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Tổng doanh thu</span>
+                                <strong id="invoiceRevenueMetric">...</strong>
+                            </div>
+                            <div class="metric">
+                                <span id="invoiceScopeLabel" class="metric-label">Phạm vi</span>
+                                <strong id="invoiceScopeMetric">...</strong>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="invoiceManageSection" class="section hidden">
+                        <div class="section-header">
+                            <h1>Lập hóa đơn mới</h1>
+                            <button id="invoiceAddItemBtn" class="btn" type="button">+ Thêm dòng</button>
+                        </div>
+                        <form id="invoiceForm" class="employee-form">
+                            <div class="form-grid">
+                                <label class="field">
+                                    <span>Mã hóa đơn</span>
+                                    <input id="invoiceFormCode" name="ma_hd" type="text" required>
+                                </label>
+                                <label class="field">
+                                    <span>Nhân viên lập</span>
+                                    <input id="invoiceFormEmployee" name="ma_nhan_vien" type="text" required>
+                                </label>
+                                <label class="field">
+                                    <span>Tên khách</span>
+                                    <input id="invoiceFormCustomerName" name="ten_kh" type="text">
+                                </label>
+                                <label class="field">
+                                    <span>SĐT khách</span>
+                                    <input id="invoiceFormCustomerPhone" name="sdt_kh" type="text">
+                                </label>
+                                <label class="field" style="grid-column: 1 / -1;">
+                                    <span>Ghi chú</span>
+                                    <input id="invoiceFormNote" name="ghi_chu" type="text">
+                                </label>
+                            </div>
+
+                            <div class="table-wrap" style="margin-top: 12px;">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Mã SP</th>
+                                            <th class="right">Số lượng</th>
+                                            <th class="right">Đơn giá</th>
+                                            <th class="right">Thành tiền</th>
+                                            <th class="right">Thao tác</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="invoiceItemRows"></tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td colspan="3" class="right"><strong>Tổng cộng</strong></td>
+                                            <td class="right"><strong id="invoiceFormTotal">0 ₫</strong></td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div class="stack-actions">
+                                <button id="invoiceSubmitBtn" class="btn btn-primary compact-btn" type="submit">Lưu hóa đơn</button>
+                                <div id="invoiceFormError" class="form-error compact-error" role="alert"></div>
+                            </div>
+                        </form>
+                    </section>
+
+                    <section class="section">
+                        <div class="section-header">
+                            <h1>Danh sách hóa đơn</h1>
+                            <span class="status" id="invoiceListStatus">Đang tải</span>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Mã HĐ</th>
+                                        <th>Chi nhánh</th>
+                                        <th>Ngày lập</th>
+                                        <th>Khách hàng</th>
+                                        <th>Nhân viên</th>
+                                        <th class="right">Tổng tiền</th>
+                                        <th class="right">Thao tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="invoiceRows"></tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section id="invoiceDetailSection" class="section hidden">
+                        <div class="section-header">
+                            <h1 id="invoiceDetailTitle">Chi tiết hóa đơn</h1>
+                            <button id="invoiceDetailClose" class="btn" type="button">Đóng</button>
+                        </div>
+                        <div id="invoiceDetailMeta" class="quick-grid"></div>
+                        <div class="table-wrap" style="margin-top: 12px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Mã SP</th>
+                                        <th>Tên SP</th>
+                                        <th class="right">Số lượng</th>
+                                        <th class="right">Đơn giá</th>
+                                        <th class="right">Thành tiền</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="invoiceDetailRows"></tbody>
                             </table>
                         </div>
                     </section>
