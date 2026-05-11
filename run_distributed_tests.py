@@ -744,6 +744,54 @@ class Runner:
         else:
             tr.failed("Không có dữ liệu thống kê chi nhánh")
 
+    # ── TC20 — Mô phỏng request thất bại (negative cases) ────────────────────
+    def tc20(self, tr: TR):
+        errors = []
+
+        # Sub-test 1: Login sai mật khẩu → expect 401
+        path1 = "/api/auth/login"
+        bad_creds = {"ma_nhan_vien": "NV001", "mat_khau": "wrong_password_xyz"}
+        tr.req  = self._fmt_req("POST", path1, bad_creds)
+        r1      = api("POST", self.url(path1), body=bad_creds)
+        tr.resp = self._fmt_resp(r1)
+        if r1 is None:
+            tr.failed("Không thể kết nối server")
+            return
+        if r1.status_code == 401:
+            tr.note("✓ Sub1: Login sai mật khẩu → 401 Unauthorized (expected)")
+        else:
+            tr.note(f"✗ Sub1: Login sai mật khẩu → {r1.status_code} (expected 401)")
+            errors.append(f"Sub1: expected 401, got {r1.status_code}")
+
+        # Sub-test 2: Gọi endpoint cần auth mà không gửi token → expect 401
+        path2 = "/api/san-pham/sync-events"
+        r2    = api("GET", self.url(path2))  # no token
+        tr.resp += f"\n\n[Sub2 — no token]\n{self._fmt_resp(r2)}"
+        if r2 is None:
+            errors.append("Sub2: connection failed")
+        elif r2.status_code == 401:
+            tr.note("✓ Sub2: GET sync-events không có token → 401 Unauthorized (expected)")
+        else:
+            tr.note(f"✗ Sub2: GET sync-events không có token → {r2.status_code} (expected 401)")
+            errors.append(f"Sub2: expected 401, got {r2.status_code}")
+
+        # Sub-test 3: Endpoint không tồn tại → expect 404
+        path3 = "/api/endpoint-khong-ton-tai"
+        r3    = api("GET", self.url(path3), token=self.token)
+        tr.resp += f"\n\n[Sub3 — 404]\n{self._fmt_resp(r3)}"
+        if r3 is None:
+            errors.append("Sub3: connection failed")
+        elif r3.status_code == 404:
+            tr.note("✓ Sub3: Endpoint không tồn tại → 404 Not Found (expected)")
+        else:
+            tr.note(f"✗ Sub3: Endpoint không tồn tại → {r3.status_code} (expected 404)")
+            errors.append(f"Sub3: expected 404, got {r3.status_code}")
+
+        if errors:
+            tr.failed(" | ".join(errors))
+        else:
+            tr.passed()
+
     # ── Summary ────────────────────────────────────────────────────────────────
     def summary(self):
         passed  = sum(1 for r in self.results if r.status == PASS)
@@ -795,6 +843,7 @@ class Runner:
             ("TC17", "Dead letter queue — xem event",              self.tc17),
             ("TC18", "Đọc SP từ DB chi nhánh CN01 qua trụ sở",    self.tc18),
             ("TC19", "Thống kê chi nhánh từ view SQL Server",      self.tc19),
+            ("TC20", "Mô phỏng request thất bại (negative cases)", self.tc20),
         ]
 
         for tc_id, name, fn in TESTS:
