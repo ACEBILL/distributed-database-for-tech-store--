@@ -164,6 +164,7 @@ services:
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-service-token-change-in-production}
+      SERVICE_API_URL: http://mysql-service:5000
     ports:
       - "${CN01_API_PORT:-5001}:5000" #1
     volumes:
@@ -196,6 +197,7 @@ services:
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       SERVICE_TOKEN: ${SERVICE_TOKEN:-dev-service-token-change-in-production}
+      SERVICE_API_URL: http://postgre-service:5000
     ports:
       - "${CN02_API_PORT:-5002}:5000"
     volumes:

@@ -1,3 +1,9 @@
+import json
+import os
+from datetime import datetime, timezone
+from urllib.error import URLError
+from urllib.request import Request, urlopen
+
 from db import (
     build_pagination_meta,
     execute_db,
@@ -253,6 +259,209 @@ def get_local_product_sync_version():
         "last_event_id": row["event_id"] if row else None,
         "last_sync_at": row["applied_at"].isoformat() if row and row["applied_at"] else None,
     }
+
+
+# ─── Branch → Trụ sở outbox ──────────────────────────────────────────────────
+
+BRANCH_SYNC_STATUS_PENDING    = "pending"
+BRANCH_SYNC_STATUS_SENT       = "sent"
+BRANCH_SYNC_STATUS_FAILED     = "failed"
+BRANCH_SYNC_STATUS_DEAD_LETTER = "dead_letter"
+BRANCH_MAX_RETRY = 5
+
+
+def ensure_branch_sync_events_table():
+    engine = get_db_engine()
+    id_col  = "SERIAL PRIMARY KEY" if engine == "postgresql" else "INT AUTO_INCREMENT PRIMARY KEY"
+    ts_type = "TIMESTAMP"          if engine == "postgresql" else "DATETIME"
+    on_upd  = ""                   if engine == "postgresql" else " ON UPDATE CURRENT_TIMESTAMP"
+    execute_db(
+        f"""
+        CREATE TABLE IF NOT EXISTS branch_sync_events (
+            id           {id_col},
+            event_id     VARCHAR(150) NOT NULL UNIQUE,
+            ma_sp        VARCHAR(50),
+            event_type   VARCHAR(50),
+            version      INT,
+            payload      TEXT,
+            status       VARCHAR(20) NOT NULL DEFAULT 'pending',
+            message      TEXT,
+            retry_count  INT NOT NULL DEFAULT 0,
+            last_error   TEXT,
+            created_at   {ts_type} DEFAULT CURRENT_TIMESTAMP{on_upd},
+            dispatched_at {ts_type} NULL
+        )
+        """
+    )
+
+
+def _branch_next_version():
+    ensure_branch_sync_events_table()
+    row = query_db(
+        "SELECT COALESCE(MAX(version), 0) + 1 AS next_v FROM branch_sync_events",
+        fetchone=True,
+    )
+    return int(row["next_v"] if row else 1)
+
+
+def _utc_now_text():
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+
+
+def _service_api_url():
+    return os.getenv("SERVICE_API_URL", "").rstrip("/")
+
+
+def _service_token_val():
+    return os.getenv("SERVICE_TOKEN", "dev-service-token-change-in-production")
+
+
+def _post_to_service(url, payload):
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "X-Service-Token": _service_token_val(),
+        },
+        method="POST",
+    )
+    with urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _update_branch_event_status(event_id, status, message=None):
+    ensure_branch_sync_events_table()
+    engine = get_db_engine()
+    now_fn = "NOW()" if engine in ("mysql", "postgresql") else "CURRENT_TIMESTAMP"
+    execute_db(
+        f"UPDATE branch_sync_events SET status = ?, message = ?, dispatched_at = {now_fn} WHERE event_id = ?",
+        (status, message, event_id),
+    )
+
+
+def _branch_event_payload(event_id, event_type, product, version):
+    branch = _branch_code()
+    return {
+        "event_id":      event_id,
+        "event_type":    event_type,
+        "source":        branch,
+        "source_branch": branch,
+        "target_branch": "TRU_SO",
+        "version":       version,
+        "occurred_at":   datetime.now(timezone.utc).isoformat(),
+        "data":          dict(product),
+    }
+
+
+def create_branch_sync_event(event_type, product):
+    """Tạo outbox event gửi lên trụ sở khi chi nhánh thay đổi sản phẩm."""
+    ensure_branch_sync_events_table()
+    if not product or not product.get("ma_sp"):
+        return None
+
+    version  = _branch_next_version()
+    event_id = f"br_evt_{_branch_code()}_{_utc_now_text()}_{product['ma_sp']}"
+    payload  = _branch_event_payload(event_id, event_type, product, version)
+    payload_json = json.dumps(payload, ensure_ascii=False)
+
+    execute_db(
+        """
+        INSERT INTO branch_sync_events (event_id, ma_sp, event_type, version, payload, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (event_id, product["ma_sp"], event_type, version, payload_json, BRANCH_SYNC_STATUS_PENDING),
+    )
+    dispatch_branch_sync_event(payload)
+    return payload
+
+
+def dispatch_branch_sync_event(event):
+    service_url = _service_api_url()
+    if not service_url:
+        _update_branch_event_status(
+            event["event_id"], BRANCH_SYNC_STATUS_PENDING, "SERVICE_API_URL not configured"
+        )
+        return None
+
+    try:
+        result = _post_to_service(f"{service_url}/api/service/products/dispatch-to-hq", event)
+    except (OSError, URLError, TimeoutError) as exc:
+        _update_branch_event_status(event["event_id"], BRANCH_SYNC_STATUS_FAILED, str(exc))
+        return None
+
+    success = bool(result.get("success"))
+    _update_branch_event_status(
+        event["event_id"],
+        BRANCH_SYNC_STATUS_SENT if success else BRANCH_SYNC_STATUS_FAILED,
+        json.dumps(result, ensure_ascii=False),
+    )
+    return result
+
+
+def get_branch_sync_events_for_api(args=None):
+    ensure_branch_sync_events_table()
+    args = args or {}
+    where, params = [], []
+    for field in ["status", "ma_sp", "event_type"]:
+        if args.get(field):
+            where.append(f"{field} = ?")
+            params.append(args[field])
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    rows = query_db(
+        "SELECT event_id, ma_sp, event_type, version, status, message, created_at, dispatched_at"
+        f" FROM branch_sync_events{where_sql} ORDER BY version DESC LIMIT 100",
+        tuple(params),
+    )
+    for row in rows:
+        for field in ["created_at", "dispatched_at"]:
+            row[field] = row[field].isoformat() if row.get(field) else None
+    return {"branch_code": _branch_code(), "data": rows}
+
+
+def _branch_do_retry(event_id, payload, current_retry_count):
+    dispatch_branch_sync_event(payload)
+    new_count = current_retry_count + 1
+    status_row = query_db(
+        "SELECT status FROM branch_sync_events WHERE event_id = ?", (event_id,), fetchone=True
+    )
+    new_status = (status_row or {}).get("status", BRANCH_SYNC_STATUS_FAILED)
+    if new_status == BRANCH_SYNC_STATUS_FAILED and new_count >= BRANCH_MAX_RETRY:
+        new_status = BRANCH_SYNC_STATUS_DEAD_LETTER
+    execute_db(
+        "UPDATE branch_sync_events SET retry_count = ?, status = ? WHERE event_id = ?",
+        (new_count, new_status, event_id),
+    )
+    return {"event_id": event_id, "status": new_status, "retry_count": new_count}
+
+
+def retry_branch_failed_events():
+    ensure_branch_sync_events_table()
+    rows = query_db(
+        "SELECT event_id, payload, retry_count FROM branch_sync_events"
+        " WHERE status = 'failed' AND retry_count < ? ORDER BY version",
+        (BRANCH_MAX_RETRY,),
+    )
+    results = [
+        _branch_do_retry(row["event_id"], json.loads(row["payload"]), int(row["retry_count"]))
+        for row in rows
+    ]
+    return {"retried": len(results), "results": results}
+
+
+def retry_branch_event_by_id(event_id):
+    ensure_branch_sync_events_table()
+    row = query_db(
+        "SELECT event_id, payload, status, retry_count FROM branch_sync_events WHERE event_id = ?",
+        (event_id,),
+        fetchone=True,
+    )
+    if not row:
+        return None
+    if row["status"] == BRANCH_SYNC_STATUS_SENT:
+        return {"event_id": event_id, "status": "skipped", "message": "Event already sent"}
+    return _branch_do_retry(event_id, json.loads(row["payload"]), int(row["retry_count"]))
 
 
 def get_product_sync_log_for_api(args=None):

@@ -150,5 +150,23 @@ def dispatch_product_event():
     )
 
 
+@app.post("/api/service/products/receive-from-branch")
+def receive_product_from_branch():
+    """Nhận event từ chi nhánh, áp dụng vào trụ sở (MSSQL)."""
+    if not _service_authorized():
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+
+    event = request.get_json(silent=True) or {}
+    try:
+        result = _post_json(
+            f"{_backend_api_url()}/api/internal/products/apply-change",
+            event,
+        )
+    except (OSError, URLError, TimeoutError) as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
+
+    return jsonify(result)
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

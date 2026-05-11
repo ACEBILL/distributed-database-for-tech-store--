@@ -1,5 +1,5 @@
-from flask import Blueprint, g, jsonify, request
-#test
+from flask import Blueprint, current_app, g, jsonify, request
+
 from middleware.auth import require_auth, require_branch_access, require_role
 from services.product_service import (
     create_product,
@@ -11,6 +11,8 @@ from services.product_service import (
     update_product,
 )
 from services.product_sync_service import (
+    apply_product_from_branch,
+    get_branch_received_events_for_api,
     get_product_sync_events_for_api,
     retry_event_by_id,
     retry_failed_events,
@@ -277,6 +279,65 @@ def api_delete_san_pham(ma_sp):
     if not deleted:
         return jsonify({"error": "Product not found"}), 404
     return jsonify({"message": "Product disabled", "ma_sp": ma_sp})
+
+
+@product_api_bp.route("/internal/products/apply-change", methods=["POST"])
+def api_internal_apply_from_branch():
+    """API nội bộ — nhận event từ chi nhánh và áp dụng vào MSSQL trụ sở
+    ---
+    tags:
+      - Đồng bộ chi nhánh → Trụ sở
+    parameters:
+      - name: X-Service-Token
+        in: header
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Event từ chi nhánh đã được xử lý
+      403:
+        description: Service token không hợp lệ
+    """
+    if request.headers.get("X-Service-Token") != current_app.config.get("SERVICE_TOKEN"):
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+
+    event = request.get_json(silent=True) or {}
+    try:
+        result = apply_product_from_branch(event)
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+    msg = "Event already applied" if result.get("status") == "ignored" else "Branch change applied to HQ"
+    return jsonify({"success": True, "message": msg, "data": result})
+
+
+@product_api_bp.route("/san-pham/branch-received-events")
+@product_api_bp.route("/tru-so/san-pham/branch-received-events")
+@require_role("admin", "giam_doc")
+def api_branch_received_events():
+    """Danh sách event nhận từ chi nhánh vào trụ sở
+    ---
+    tags:
+      - Đồng bộ chi nhánh → Trụ sở
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: status
+        in: query
+        schema: {type: string}
+      - name: source_branch
+        in: query
+        schema: {type: string}
+      - name: ma_sp
+        in: query
+        schema: {type: string}
+    responses:
+      200:
+        description: Danh sách event nhận từ chi nhánh
+    """
+    return jsonify(get_branch_received_events_for_api(request.args))
 
 
 @product_api_bp.route("/san-pham-theo-chi-nhanh")

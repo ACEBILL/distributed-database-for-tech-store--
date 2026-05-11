@@ -1,12 +1,22 @@
 from flask import Blueprint, current_app, jsonify, request
 
-from middleware.auth import require_auth
-from services.product_service import get_products_from_branch_database_for_api
+from middleware.auth import require_auth, require_role
+from services.product_service import (
+    create_product,
+    get_product_by_id_for_api,
+    get_products_from_branch_database_for_api,
+    soft_delete_product,
+    update_product,
+)
 from services.product_sync_service import (
     apply_product_sync_batch,
     apply_product_sync_event,
+    create_branch_sync_event,
+    get_branch_sync_events_for_api,
     get_local_product_sync_version,
     get_product_sync_log_for_api,
+    retry_branch_event_by_id,
+    retry_branch_failed_events,
 )
 
 
@@ -163,6 +173,179 @@ def api_internal_product_sync_log():
             "data": get_product_sync_log_for_api(request.args),
         }
     )
+
+
+@product_api_bp.route("/san-pham", methods=["POST"])
+@require_role("admin", "giam_doc", "truong_phong")
+def api_create_san_pham():
+    """Tạo sản phẩm tại chi nhánh và đồng bộ lên trụ sở
+    ---
+    tags:
+      - Sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ma_sp, ten_sp, gia, ma_loai_sp, ma_ncc]
+            properties:
+              ma_sp: {type: string}
+              ten_sp: {type: string}
+              gia: {type: number}
+              ti_le_loi_nhuan: {type: number}
+              ti_le_giam_gia: {type: number}
+              mo_ta: {type: string}
+              ma_loai_sp: {type: string}
+              ma_ncc: {type: integer}
+              trang_thai: {type: integer}
+    responses:
+      201:
+        description: Sản phẩm đã được tạo và đồng bộ lên trụ sở
+    """
+    product = create_product(request.get_json(silent=True) or {})
+    try:
+        create_branch_sync_event("PRODUCT_CREATED", product)
+    except Exception:
+        pass
+    return jsonify(product), 201
+
+
+@product_api_bp.route("/san-pham/<ma_sp>", methods=["PUT"])
+@require_role("admin", "giam_doc", "truong_phong")
+def api_update_san_pham(ma_sp):
+    """Cập nhật sản phẩm tại chi nhánh và đồng bộ lên trụ sở
+    ---
+    tags:
+      - Sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_sp
+        in: path
+        required: true
+        schema: {type: string}
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+    responses:
+      200:
+        description: Sản phẩm đã được cập nhật và đồng bộ lên trụ sở
+      404:
+        description: Không tìm thấy sản phẩm
+    """
+    product = update_product(ma_sp, request.get_json(silent=True) or {})
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+    try:
+        create_branch_sync_event("PRODUCT_UPDATED", product)
+    except Exception:
+        pass
+    return jsonify(product)
+
+
+@product_api_bp.route("/san-pham/<ma_sp>", methods=["DELETE"])
+@require_role("admin", "giam_doc", "truong_phong")
+def api_delete_san_pham(ma_sp):
+    """Ngưng bán sản phẩm tại chi nhánh và đồng bộ lên trụ sở
+    ---
+    tags:
+      - Sản phẩm chi nhánh
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: ma_sp
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Sản phẩm đã được ngưng bán và đồng bộ lên trụ sở
+      404:
+        description: Không tìm thấy sản phẩm
+    """
+    deleted = soft_delete_product(ma_sp)
+    if not deleted:
+        return jsonify({"error": "Product not found"}), 404
+    product = get_product_by_id_for_api(ma_sp)
+    try:
+        create_branch_sync_event("PRODUCT_DELETED", product)
+    except Exception:
+        pass
+    return jsonify({"message": "Product disabled", "ma_sp": ma_sp})
+
+
+@product_api_bp.route("/san-pham/sync-events")
+@require_role("admin", "giam_doc")
+def api_branch_sync_events():
+    """Danh sách event đồng bộ sản phẩm từ chi nhánh lên trụ sở
+    ---
+    tags:
+      - Đồng bộ chi nhánh → Trụ sở
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: status
+        in: query
+        schema: {type: string, enum: [pending, sent, failed, dead_letter]}
+      - name: ma_sp
+        in: query
+        schema: {type: string}
+      - name: event_type
+        in: query
+        schema: {type: string}
+    responses:
+      200:
+        description: Danh sách outbox event từ chi nhánh lên trụ sở
+    """
+    return jsonify(get_branch_sync_events_for_api(request.args))
+
+
+@product_api_bp.route("/san-pham/sync-events/retry-failed", methods=["POST"])
+@require_role("admin", "giam_doc")
+def api_branch_retry_failed():
+    """Retry tất cả event failed lên trụ sở
+    ---
+    tags:
+      - Đồng bộ chi nhánh → Trụ sở
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: Kết quả retry
+    """
+    return jsonify(retry_branch_failed_events())
+
+
+@product_api_bp.route("/san-pham/sync-events/<event_id>/retry", methods=["POST"])
+@require_role("admin", "giam_doc")
+def api_branch_retry_event(event_id):
+    """Retry một event lên trụ sở theo event_id
+    ---
+    tags:
+      - Đồng bộ chi nhánh → Trụ sở
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: event_id
+        in: path
+        required: true
+        schema: {type: string}
+    responses:
+      200:
+        description: Kết quả retry
+      404:
+        description: Không tìm thấy event
+    """
+    result = retry_branch_event_by_id(event_id)
+    if result is None:
+        return jsonify({"error": "Event not found"}), 404
+    return jsonify(result)
 
 
 @product_api_bp.route("/chi-nhanh/<ma_chi_nhanh>/san-pham")

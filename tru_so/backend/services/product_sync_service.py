@@ -267,6 +267,181 @@ def retry_event_by_id(event_id):
     return _do_retry(event_id, json.loads(row["payload"]), int(row["retry_count"]))
 
 
+# ─── Chi nhánh → Trụ sở receiver ─────────────────────────────────────────────
+
+def _ensure_branch_received_table():
+    execute_db(
+        """
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'branch_received_events')
+        CREATE TABLE branch_received_events (
+            id            INT IDENTITY PRIMARY KEY,
+            event_id      NVARCHAR(150) NOT NULL UNIQUE,
+            event_type    NVARCHAR(50),
+            ma_sp         NVARCHAR(50),
+            source_branch NVARCHAR(20),
+            version       INT,
+            status        NVARCHAR(20),
+            message       NVARCHAR(MAX),
+            received_at   DATETIME DEFAULT GETDATE(),
+            applied_at    DATETIME NULL
+        )
+        """
+    )
+
+
+def _branch_event_already_received(event_id):
+    _ensure_branch_received_table()
+    return bool(
+        query_db(
+            "SELECT event_id FROM branch_received_events WHERE event_id = ?",
+            (event_id,),
+            fetchone=True,
+        )
+    )
+
+
+def _record_branch_received(event, source_branch, status, message):
+    _ensure_branch_received_table()
+    execute_db(
+        """
+        INSERT INTO branch_received_events
+            (event_id, event_type, ma_sp, source_branch, version, status, message, applied_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE())
+        """,
+        (
+            event.get("event_id"),
+            event.get("event_type"),
+            (event.get("data") or {}).get("ma_sp"),
+            source_branch,
+            event.get("version"),
+            status,
+            message,
+        ),
+    )
+
+
+def _hq_product_exists(ma_sp):
+    return bool(
+        query_db("SELECT ma_sp FROM SAN_PHAM WHERE ma_sp = ?", (ma_sp,), fetchone=True)
+    )
+
+
+def _hq_insert_product(data, source_branch):
+    required = ["ma_sp", "ten_sp", "gia", "ma_loai_sp", "ma_ncc"]
+    missing = [f for f in required if data.get(f) in (None, "")]
+    if missing:
+        raise ValueError("Missing fields for insert: " + ", ".join(missing))
+    execute_db(
+        """
+        INSERT INTO SAN_PHAM (
+            ma_sp, ten_sp, gia, ti_le_loi_nhuan, ti_le_giam_gia,
+            mo_ta, ma_loai_sp, ma_ncc, trang_thai, ma_chi_nhanh
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data["ma_sp"],
+            data["ten_sp"],
+            data["gia"],
+            data.get("ti_le_loi_nhuan", 0),
+            data.get("ti_le_giam_gia", 0),
+            data.get("mo_ta"),
+            data["ma_loai_sp"],
+            data["ma_ncc"],
+            data.get("trang_thai", 1),
+            data.get("ma_chi_nhanh") or source_branch,
+        ),
+    )
+
+
+def _hq_update_product(data, force_deleted=False):
+    allowed = [
+        "ten_sp", "gia", "ti_le_loi_nhuan", "ti_le_giam_gia",
+        "mo_ta", "ma_loai_sp", "ma_ncc", "trang_thai",
+    ]
+    assignments, params = [], []
+    for field in allowed:
+        if field in data:
+            assignments.append(f"{field} = ?")
+            params.append(data[field])
+    if force_deleted and "trang_thai" not in data:
+        assignments.append("trang_thai = ?")
+        params.append(0)
+    if not assignments:
+        return
+    assignments.append("cap_nhat_vao = GETDATE()")
+    params.append(data["ma_sp"])
+    execute_db(
+        f"UPDATE SAN_PHAM SET {', '.join(assignments)} WHERE ma_sp = ?",
+        tuple(params),
+    )
+
+
+def apply_product_from_branch(event):
+    """Áp dụng thay đổi sản phẩm từ chi nhánh vào MSSQL trụ sở (không trigger outbox)."""
+    required = ["event_id", "event_type", "data"]
+    missing = [f for f in required if event.get(f) in (None, "")]
+    if missing:
+        raise ValueError("Missing event fields: " + ", ".join(missing))
+
+    event_id = event["event_id"]
+    if _branch_event_already_received(event_id):
+        return {"event_id": event_id, "status": "ignored"}
+
+    event_type    = event["event_type"]
+    source_branch = event.get("source_branch") or event.get("source", "")
+    data          = dict(event.get("data") or {})
+    ma_sp         = data.get("ma_sp")
+
+    if not ma_sp:
+        raise ValueError("Missing data.ma_sp")
+
+    try:
+        exists = _hq_product_exists(ma_sp)
+        if event_type == "PRODUCT_DELETED":
+            if exists:
+                _hq_update_product(data, force_deleted=True)
+            else:
+                _hq_insert_product(data, source_branch)
+                _hq_update_product({"ma_sp": ma_sp, "trang_thai": 0})
+        elif event_type in ("PRODUCT_CREATED", "PRODUCT_UPDATED"):
+            if exists:
+                _hq_update_product(data)
+            else:
+                _hq_insert_product(data, source_branch)
+        else:
+            raise ValueError(f"Unsupported event_type: {event_type}")
+    except Exception as exc:
+        _record_branch_received(event, source_branch, "failed", str(exc))
+        raise
+
+    _record_branch_received(event, source_branch, "success", "Applied from branch")
+    return {"event_id": event_id, "ma_sp": ma_sp, "status": "applied", "source_branch": source_branch}
+
+
+def get_branch_received_events_for_api(args=None):
+    _ensure_branch_received_table()
+    args = args or {}
+    where, params = [], []
+    for field in ["status", "source_branch", "ma_sp", "event_type"]:
+        if args.get(field):
+            where.append(f"{field} = ?")
+            params.append(args[field])
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    rows = query_db(
+        "SELECT TOP 100 event_id, event_type, ma_sp, source_branch, version, status, message,"
+        " received_at, applied_at"
+        " FROM branch_received_events"
+        + where_sql
+        + " ORDER BY id DESC",
+        tuple(params),
+    )
+    for row in rows:
+        for field in ["received_at", "applied_at"]:
+            row[field] = row[field].isoformat() if row.get(field) else None
+    return {"data": rows}
+
+
 def get_product_sync_events_for_api(args=None):
     ensure_product_sync_events_table()
     args = args or {}
