@@ -450,6 +450,7 @@
                             <h1>Lập hóa đơn mới</h1>
                             <button id="invoiceAddItemBtn" class="btn" type="button">+ Thêm dòng</button>
                         </div>
+                        <datalist id="invoiceSpList"></datalist>
                         <form id="invoiceForm" class="employee-form">
                             <div class="form-grid">
                                 <label class="field">
@@ -480,7 +481,8 @@
                                         <tr>
                                             <th>Mã SP</th>
                                             <th class="right">Số lượng</th>
-                                            <th class="right">Đơn giá</th>
+                                            <th class="right">Đơn giá gốc</th>
+                                            <th class="right">Giảm giá</th>
                                             <th class="right">Thành tiền</th>
                                             <th class="right">Thao tác</th>
                                         </tr>
@@ -488,7 +490,7 @@
                                     <tbody id="invoiceItemRows"></tbody>
                                     <tfoot>
                                         <tr>
-                                            <td colspan="3" class="right"><strong>Tổng cộng</strong></td>
+                                            <td colspan="4" class="right"><strong>Tổng cộng</strong></td>
                                             <td class="right"><strong id="invoiceFormTotal">0 ₫</strong></td>
                                             <td></td>
                                         </tr>

@@ -1507,22 +1507,45 @@ async function loadInvoices() {
     }
 }
 
+function _invoiceLineTotal(item) {
+    const qty = Number(item.so_luong) || 0;
+    const gia = Number(item.don_gia) || 0;
+    const disc = Number(item.ti_le_giam_gia) || 0;
+    return Math.round(qty * gia * (1 - disc / 100));
+}
+
 function renderInvoiceItemRow(index, item) {
+    const readonlyStyle = "text-align:right;width:120px;background:#f3f5f8;color:#556170;cursor:not-allowed;border-color:#d8dde3;";
     return `
         <tr>
             <td>
-                <input type="text" data-invoice-item-field="ma_sp" data-invoice-item-index="${index}"
-                    value="${escapeHtml(item.ma_sp)}" placeholder="SP001">
+                <input type="text"
+                    list="invoiceSpList"
+                    data-invoice-item-field="ma_sp" data-invoice-item-index="${index}"
+                    value="${escapeHtml(item.ma_sp)}"
+                    placeholder="Gõ mã hoặc tên SP để tìm..."
+                    autocomplete="off"
+                    style="width:240px;">
             </td>
             <td class="right">
                 <input type="number" min="1" step="1" data-invoice-item-field="so_luong" data-invoice-item-index="${index}"
                     value="${escapeHtml(item.so_luong)}" style="text-align:right;width:80px;">
             </td>
             <td class="right">
-                <input type="number" min="0" step="1000" data-invoice-item-field="don_gia" data-invoice-item-index="${index}"
-                    value="${escapeHtml(item.don_gia)}" style="text-align:right;width:140px;">
+                <input type="number" data-invoice-item-field="don_gia" data-invoice-item-index="${index}"
+                    value="${escapeHtml(item.don_gia)}"
+                    readonly tabindex="-1"
+                    title="Đơn giá gốc lấy từ sản phẩm"
+                    style="${readonlyStyle}">
             </td>
-            <td class="right">${currencyFormatter.format((item.so_luong || 0) * (item.don_gia || 0))}</td>
+            <td class="right">
+                <input type="number" data-invoice-item-field="ti_le_giam_gia" data-invoice-item-index="${index}"
+                    value="${escapeHtml(item.ti_le_giam_gia || 0)}"
+                    readonly tabindex="-1"
+                    title="Tỉ lệ giảm giá lấy từ sản phẩm"
+                    style="${readonlyStyle}width:80px;"> %
+            </td>
+            <td class="right">${currencyFormatter.format(_invoiceLineTotal(item))}</td>
             <td class="right">
                 <button class="table-btn table-btn-danger" type="button" data-invoice-item-remove="${index}">Xóa</button>
             </td>
@@ -1530,16 +1553,31 @@ function renderInvoiceItemRow(index, item) {
     `;
 }
 
+function renderInvoiceSpDatalist() {
+    const datalist = document.getElementById("invoiceSpList");
+    if (!datalist) return;
+    const sps = Array.isArray(productListCache) ? productListCache : [];
+    if (!sps.length) {
+        datalist.innerHTML = "";
+        return;
+    }
+    datalist.innerHTML = sps
+        .map((sp) => {
+            const giaBan = sp.gia_ban_thuc_te || sp.gia || 0;
+            const label = `${sp.ten_sp || ""} — ${currencyFormatter.format(giaBan)}`;
+            return `<option value="${escapeHtml(sp.ma_sp)}" label="${escapeHtml(label)}">${escapeHtml(label)}</option>`;
+        })
+        .join("");
+}
+
 function renderInvoiceItems() {
+    renderInvoiceSpDatalist();
     if (!invoiceItems.length) {
-        invoiceItemRows.innerHTML = `<tr><td class="empty" colspan="5">Chưa có sản phẩm. Bấm "+ Thêm dòng" để thêm.</td></tr>`;
+        invoiceItemRows.innerHTML = `<tr><td class="empty" colspan="6">Chưa có sản phẩm. Bấm "+ Thêm dòng" để thêm.</td></tr>`;
     } else {
         invoiceItemRows.innerHTML = invoiceItems.map((it, idx) => renderInvoiceItemRow(idx, it)).join("");
     }
-    const total = invoiceItems.reduce(
-        (sum, it) => sum + (Number(it.so_luong) || 0) * (Number(it.don_gia) || 0),
-        0
-    );
+    const total = invoiceItems.reduce((sum, it) => sum + _invoiceLineTotal(it), 0);
     invoiceFormTotal.textContent = currencyFormatter.format(total);
 }
 
@@ -1627,15 +1665,40 @@ invoiceItemRows.addEventListener("input", (event) => {
     const field = target.dataset.invoiceItemField;
     const idx = Number(target.dataset.invoiceItemIndex);
     if (field === undefined || Number.isNaN(idx)) return;
+
     if (field === "ma_sp") {
-        invoiceItems[idx].ma_sp = target.value.trim();
+        const value = target.value.trim();
+        invoiceItems[idx].ma_sp = value;
+        // Khi mã SP khớp đúng 1 SP trong catalog chi nhánh → auto-fill đơn giá GỐC + giảm giá
+        const sps = Array.isArray(productListCache) ? productListCache : [];
+        const sp = sps.find((p) => (p.ma_sp || "") === value);
+        if (sp) {
+            const gia = Number(sp.gia || 0);
+            const disc = Number(sp.ti_le_giam_gia || 0);
+            invoiceItems[idx].don_gia = gia;
+            invoiceItems[idx].ti_le_giam_gia = disc;
+            const priceInput = invoiceItemRows.querySelector(
+                `input[data-invoice-item-field="don_gia"][data-invoice-item-index="${idx}"]`
+            );
+            const discInput = invoiceItemRows.querySelector(
+                `input[data-invoice-item-field="ti_le_giam_gia"][data-invoice-item-index="${idx}"]`
+            );
+            if (priceInput) priceInput.value = gia;
+            if (discInput) discInput.value = disc;
+        }
     } else {
         invoiceItems[idx][field] = Number(target.value) || 0;
     }
-    const total = invoiceItems.reduce(
-        (sum, it) => sum + (Number(it.so_luong) || 0) * (Number(it.don_gia) || 0),
-        0
-    );
+
+    // Cập nhật ô "Thành tiền" của dòng + tổng cộng — không re-render (giữ focus)
+    const lineTotal = _invoiceLineTotal(invoiceItems[idx]);
+    const tr = target.closest("tr");
+    if (tr) {
+        const cells = tr.querySelectorAll("td");
+        // Bảng có 6 cột: Mã SP | SL | Đơn giá | Giảm giá | Thành tiền | Thao tác
+        if (cells[4]) cells[4].textContent = currencyFormatter.format(lineTotal);
+    }
+    const total = invoiceItems.reduce((sum, it) => sum + _invoiceLineTotal(it), 0);
     invoiceFormTotal.textContent = currencyFormatter.format(total);
 });
 
