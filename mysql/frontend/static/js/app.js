@@ -1656,7 +1656,7 @@ invoiceSourceButtons.forEach((button) => {
 });
 
 invoiceAddItemBtn.addEventListener("click", () => {
-    invoiceItems.push({ ma_sp: "", so_luong: 1, don_gia: 0 });
+    invoiceItems.push({ ma_sp: "", so_luong: 1, don_gia: 0, ti_le_giam_gia: 0 });
     renderInvoiceItems();
 });
 
@@ -1730,7 +1730,7 @@ invoiceForm.addEventListener("submit", async (event) => {
             items: invoiceItems.map((it) => ({
                 ma_sp: String(it.ma_sp || "").trim(),
                 so_luong: Number(it.so_luong) || 0,
-                don_gia: Number(it.don_gia) || 0,
+                don_gia: _invoiceLineTotal({ ...it, so_luong: 1 }),
             })),
         };
         await fetchJson("/api/hoa-don", {

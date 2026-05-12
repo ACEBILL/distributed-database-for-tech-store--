@@ -1507,7 +1507,16 @@ async function loadInvoices() {
     }
 }
 
+function _invoiceLineTotal(item) {
+    const qty = Number(item.so_luong) || 0;
+    const gia = Number(item.don_gia) || 0;
+    const disc = Number(item.ti_le_giam_gia) || 0;
+    return Math.round(qty * gia * (1 - disc / 100));
+}
+
 function renderInvoiceItemRow(index, item) {
+    const giamGia = Number(item.ti_le_giam_gia) || 0;
+    const lineTotal = _invoiceLineTotal(item);
     return `
         <tr>
             <td>
@@ -1527,10 +1536,18 @@ function renderInvoiceItemRow(index, item) {
                 <input type="number" data-invoice-item-field="don_gia" data-invoice-item-index="${index}"
                     value="${escapeHtml(item.don_gia)}"
                     readonly tabindex="-1"
-                    title="Đơn giá lấy tự động từ sản phẩm"
-                    style="text-align:right;width:140px;background:#f3f5f8;color:#556170;cursor:not-allowed;border-color:#d8dde3;">
+                    title="Đơn giá gốc — tự động từ sản phẩm"
+                    style="text-align:right;width:130px;background:#f3f5f8;color:#556170;cursor:not-allowed;border-color:#d8dde3;">
             </td>
-            <td class="right">${currencyFormatter.format((item.so_luong || 0) * (item.don_gia || 0))}</td>
+            <td class="right">
+                <input type="number" min="0" max="100" step="0.1"
+                    data-invoice-item-field="ti_le_giam_gia" data-invoice-item-index="${index}"
+                    value="${giamGia}"
+                    readonly tabindex="-1"
+                    title="Tỉ lệ giảm giá — tự động từ sản phẩm"
+                    style="text-align:right;width:70px;background:#f3f5f8;color:#556170;cursor:not-allowed;border-color:#d8dde3;">
+            </td>
+            <td class="right">${currencyFormatter.format(lineTotal)}</td>
             <td class="right">
                 <button class="table-btn table-btn-danger" type="button" data-invoice-item-remove="${index}">Xóa</button>
             </td>
@@ -1558,14 +1575,11 @@ function renderInvoiceSpDatalist() {
 function renderInvoiceItems() {
     renderInvoiceSpDatalist();
     if (!invoiceItems.length) {
-        invoiceItemRows.innerHTML = `<tr><td class="empty" colspan="5">Chưa có sản phẩm. Bấm "+ Thêm dòng" để thêm.</td></tr>`;
+        invoiceItemRows.innerHTML = `<tr><td class="empty" colspan="6">Chưa có sản phẩm. Bấm "+ Thêm dòng" để thêm.</td></tr>`;
     } else {
         invoiceItemRows.innerHTML = invoiceItems.map((it, idx) => renderInvoiceItemRow(idx, it)).join("");
     }
-    const total = invoiceItems.reduce(
-        (sum, it) => sum + (Number(it.so_luong) || 0) * (Number(it.don_gia) || 0),
-        0
-    );
+    const total = invoiceItems.reduce((sum, it) => sum + _invoiceLineTotal(it), 0);
     invoiceFormTotal.textContent = currencyFormatter.format(total);
 }
 
@@ -1644,7 +1658,7 @@ invoiceSourceButtons.forEach((button) => {
 });
 
 invoiceAddItemBtn.addEventListener("click", () => {
-    invoiceItems.push({ ma_sp: "", so_luong: 1, don_gia: 0 });
+    invoiceItems.push({ ma_sp: "", so_luong: 1, don_gia: 0, ti_le_giam_gia: 0 });
     renderInvoiceItems();
 });
 
@@ -1657,34 +1671,35 @@ invoiceItemRows.addEventListener("input", (event) => {
     if (field === "ma_sp") {
         const value = target.value.trim();
         invoiceItems[idx].ma_sp = value;
-        // Khi mã SP khớp đúng 1 SP trong catalog chi nhánh → auto-fill đơn giá
+        // Khi mã SP khớp đúng → auto-fill đơn giá + tỉ lệ giảm giá
         const sps = Array.isArray(productListCache) ? productListCache : [];
         const sp = sps.find((p) => (p.ma_sp || "") === value);
         if (sp) {
             const gia = Number(sp.gia_ban_thuc_te || sp.gia || 0);
+            const giamGia = Number(sp.ti_le_giam_gia || 0);
             invoiceItems[idx].don_gia = gia;
+            invoiceItems[idx].ti_le_giam_gia = giamGia;
             const priceInput = invoiceItemRows.querySelector(
                 `input[data-invoice-item-field="don_gia"][data-invoice-item-index="${idx}"]`
             );
             if (priceInput) priceInput.value = gia;
+            const discountInput = invoiceItemRows.querySelector(
+                `input[data-invoice-item-field="ti_le_giam_gia"][data-invoice-item-index="${idx}"]`
+            );
+            if (discountInput) discountInput.value = giamGia;
         }
     } else {
         invoiceItems[idx][field] = Number(target.value) || 0;
     }
 
     // Cập nhật ô "Thành tiền" của dòng + tổng cộng — không re-render (giữ focus)
-    const lineTotal =
-        (Number(invoiceItems[idx].so_luong) || 0) *
-        (Number(invoiceItems[idx].don_gia) || 0);
+    const lineTotal = _invoiceLineTotal(invoiceItems[idx]);
     const tr = target.closest("tr");
     if (tr) {
         const cells = tr.querySelectorAll("td");
-        if (cells[3]) cells[3].textContent = currencyFormatter.format(lineTotal);
+        if (cells[4]) cells[4].textContent = currencyFormatter.format(lineTotal);
     }
-    const total = invoiceItems.reduce(
-        (sum, it) => sum + (Number(it.so_luong) || 0) * (Number(it.don_gia) || 0),
-        0
-    );
+    const total = invoiceItems.reduce((sum, it) => sum + _invoiceLineTotal(it), 0);
     invoiceFormTotal.textContent = currencyFormatter.format(total);
 });
 
@@ -1716,7 +1731,7 @@ invoiceForm.addEventListener("submit", async (event) => {
             items: invoiceItems.map((it) => ({
                 ma_sp: String(it.ma_sp || "").trim(),
                 so_luong: Number(it.so_luong) || 0,
-                don_gia: Number(it.don_gia) || 0,
+                don_gia: _invoiceLineTotal({ ...it, so_luong: 1 }),
             })),
         };
         await fetchJson("/api/hoa-don", {
