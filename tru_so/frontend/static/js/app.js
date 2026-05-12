@@ -92,6 +92,236 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
 
 const numberFormatter = new Intl.NumberFormat("vi-VN");
 
+const overviewChartState = {
+    products: 0,
+    employees: 0,
+    invoices: 0,
+    revenueStats: null,
+};
+
+const overviewColors = {
+    product: "#1f6f62",
+    employee: "#3867a8",
+    invoice: "#b06b26",
+    revenue: "#2b7a6b",
+    accent: "#6b7280",
+};
+
+function formatCompactCurrency(value) {
+    const amount = Number(value) || 0;
+    if (amount >= 1000000000) return `${(amount / 1000000000).toFixed(1)} tỷ`;
+    if (amount >= 1000000) return `${(amount / 1000000).toFixed(1)} tr`;
+    return currencyFormatter.format(amount);
+}
+
+function prepareChart(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(280, Math.floor(rect.width || canvas.clientWidth || 320));
+    const height = Math.max(220, Math.floor(rect.height || canvas.clientHeight || 240));
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(width * ratio);
+    canvas.height = Math.floor(height * ratio);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    return { ctx, width, height };
+}
+
+function drawChartEmpty(canvasId, message) {
+    const chart = prepareChart(canvasId);
+    if (!chart) return;
+    const { ctx, width, height } = chart;
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = "#64717f";
+    ctx.font = "700 13px Segoe UI, Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(message, width / 2, height / 2);
+}
+
+function setChartLegend(id, items) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = items
+        .map(
+            (item) => `
+                <span class="legend-item">
+                    <span class="legend-dot" style="--legend-color: ${item.color}"></span>
+                    ${escapeHtml(item.label)}
+                </span>
+            `
+        )
+        .join("");
+}
+
+function drawBarChart(canvasId, items, options = {}) {
+    const visibleItems = items.filter((item) => Number(item.value) > 0);
+    if (!visibleItems.length) {
+        drawChartEmpty(canvasId, options.emptyText || "Chưa có dữ liệu để vẽ biểu đồ");
+        return;
+    }
+
+    const chart = prepareChart(canvasId);
+    if (!chart) return;
+    const { ctx, width, height } = chart;
+    const margin = { top: 18, right: 18, bottom: 46, left: 46 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+    const maxValue = Math.max(...visibleItems.map((item) => Number(item.value)), 1);
+    const valueFormatter = options.valueFormatter || ((value) => numberFormatter.format(value));
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "#edf1f5";
+    ctx.lineWidth = 1;
+    ctx.fillStyle = "#64717f";
+    ctx.font = "12px Segoe UI, Arial";
+    ctx.textAlign = "right";
+
+    for (let i = 0; i <= 4; i += 1) {
+        const y = margin.top + chartHeight - (chartHeight * i) / 4;
+        const value = (maxValue * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(margin.left, y);
+        ctx.lineTo(width - margin.right, y);
+        ctx.stroke();
+        ctx.fillText(valueFormatter(value), margin.left - 8, y + 4);
+    }
+
+    const gap = Math.min(28, chartWidth / visibleItems.length * 0.22);
+    const barWidth = Math.max(24, (chartWidth - gap * (visibleItems.length - 1)) / visibleItems.length);
+
+    visibleItems.forEach((item, index) => {
+        const x = margin.left + index * (barWidth + gap);
+        const barHeight = Math.max(4, (Number(item.value) / maxValue) * chartHeight);
+        const y = margin.top + chartHeight - barHeight;
+        ctx.fillStyle = item.color;
+        ctx.fillRect(x, y, barWidth, barHeight);
+        ctx.fillStyle = "#20242a";
+        ctx.font = "700 12px Segoe UI, Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(valueFormatter(Number(item.value)), x + barWidth / 2, y - 7);
+        ctx.fillStyle = "#4a5663";
+        ctx.font = "12px Segoe UI, Arial";
+        ctx.fillText(item.shortLabel || item.label, x + barWidth / 2, height - 18);
+    });
+}
+
+function drawLineChart(canvasId, points, options = {}) {
+    const visiblePoints = points.filter((point) => Number(point.value) > 0);
+    if (!visiblePoints.length) {
+        drawChartEmpty(canvasId, options.emptyText || "Chưa có dữ liệu để vẽ biểu đồ");
+        return;
+    }
+
+    const chart = prepareChart(canvasId);
+    if (!chart) return;
+    const { ctx, width, height } = chart;
+    const margin = { top: 18, right: 18, bottom: 46, left: 56 };
+    const chartWidth = width - margin.left - margin.right;
+    const chartHeight = height - margin.top - margin.bottom;
+    const maxValue = Math.max(...visiblePoints.map((point) => Number(point.value)), 1);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "#edf1f5";
+    ctx.fillStyle = "#64717f";
+    ctx.font = "12px Segoe UI, Arial";
+    ctx.textAlign = "right";
+
+    for (let i = 0; i <= 4; i += 1) {
+        const y = margin.top + chartHeight - (chartHeight * i) / 4;
+        const value = (maxValue * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(margin.left, y);
+        ctx.lineTo(width - margin.right, y);
+        ctx.stroke();
+        ctx.fillText(formatCompactCurrency(value), margin.left - 8, y + 4);
+    }
+
+    const step = visiblePoints.length > 1 ? chartWidth / (visiblePoints.length - 1) : chartWidth;
+    const coords = visiblePoints.map((point, index) => ({
+        x: margin.left + step * index,
+        y: margin.top + chartHeight - (Number(point.value) / maxValue) * chartHeight,
+        point,
+    }));
+
+    ctx.strokeStyle = options.color || overviewColors.revenue;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    coords.forEach((coord, index) => {
+        if (index === 0) ctx.moveTo(coord.x, coord.y);
+        else ctx.lineTo(coord.x, coord.y);
+    });
+    ctx.stroke();
+
+    coords.forEach((coord) => {
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(coord.x, coord.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = options.color || overviewColors.revenue;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = "#4a5663";
+        ctx.font = "12px Segoe UI, Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(coord.point.shortLabel || coord.point.label, coord.x, height - 18);
+    });
+}
+
+function renderOverviewOpsChart() {
+    const items = [
+        { label: "Sản phẩm", shortLabel: "SP", value: overviewChartState.products, color: overviewColors.product },
+        { label: "Nhân viên", shortLabel: "NV", value: overviewChartState.employees, color: overviewColors.employee },
+        { label: "Hóa đơn", shortLabel: "HĐ", value: overviewChartState.invoices, color: overviewColors.invoice },
+    ];
+    drawBarChart("overviewOpsChart", items, { emptyText: "Đang chờ dữ liệu vận hành" });
+    setChartLegend("overviewOpsLegend", items);
+    setText("overviewOpsChartMeta", activePortal ? activePortal.overviewScopeLabel : "Đang tải");
+}
+
+function renderOverviewRevenueChart(stats) {
+    if (!activePortal) return;
+    const isCentral = activePortal.key === "central";
+    if (isCentral) {
+        const branches = (stats?.theo_chi_nhanh || []).filter((item) => item.branch_status === "ok");
+        const items = branches.map((branch, index) => ({
+            label: `${branch.ma_chi_nhanh} - ${branch.ten_chi_nhanh || ""}`.trim(),
+            shortLabel: branch.ma_chi_nhanh,
+            value: branch.tong_doanh_thu || 0,
+            color: index % 2 === 0 ? overviewColors.revenue : "#3867a8",
+        }));
+        setText("overviewRevenueChartTitle", "Doanh thu theo chi nhánh");
+        setText("overviewRevenueChartMeta", `${numberFormatter.format(items.length)} chi nhánh`);
+        drawBarChart("overviewRevenueChart", items, {
+            emptyText: "Chưa có doanh thu chi nhánh",
+            valueFormatter: formatCompactCurrency,
+        });
+        setChartLegend("overviewRevenueLegend", items);
+        return;
+    }
+
+    const days = (stats?.theo_ngay || [])
+        .slice(0, 7)
+        .reverse()
+        .map((day) => ({
+            label: day.ngay || "",
+            shortLabel: String(day.ngay || "").slice(5),
+            value: day.tong_doanh_thu || 0,
+            color: overviewColors.revenue,
+        }));
+    setText("overviewRevenueChartTitle", "Doanh thu 7 ngày gần nhất");
+    setText("overviewRevenueChartMeta", activePortal.branchCode || "Chi nhánh");
+    drawLineChart("overviewRevenueChart", days, {
+        emptyText: "Chưa có doanh thu theo ngày",
+        color: overviewColors.revenue,
+    });
+    setChartLegend("overviewRevenueLegend", [{ label: "Doanh thu", color: overviewColors.revenue }]);
+}
+
 const portalPickerView = document.getElementById("portalPickerView");
 const loginView = document.getElementById("loginView");
 const appView = document.getElementById("appView");
@@ -760,6 +990,8 @@ function renderProducts(payload) {
     const canManage = canManageProducts();
     const colCount = canManage ? 7 : 6;
 
+    overviewChartState.products = total;
+    renderOverviewOpsChart();
     setText("productCount", numberFormatter.format(total));
     setText("productSource", `Nguồn: ${sourceLabel}`);
     setText("overviewProductSource", sourceLabel);
@@ -899,6 +1131,8 @@ function renderEmployees(payload) {
     const canDisable = canDisableEmployees();
 
     currentEmployees = employees;
+    overviewChartState.employees = total;
+    renderOverviewOpsChart();
     setText("employeeCount", numberFormatter.format(total));
     setText("employeeStatus", getEmployeeStatusLabel(total));
     employeeActionHead.classList.toggle("hidden", !canManage);
@@ -986,10 +1220,18 @@ function renderBranchInsight(health, employeesPayload) {
 }
 
 function setLoadingState() {
+    overviewChartState.products = 0;
+    overviewChartState.employees = 0;
+    overviewChartState.invoices = 0;
+    overviewChartState.revenueStats = null;
     setText("overviewStatus", "Đang tải");
+    setText("overviewOpsChartMeta", "Đang tải");
+    setText("overviewRevenueChartMeta", "Đang tải");
     setText("productSource", "Đang tải");
     setText("employeeStatus", "Đang tải");
     setText("secondaryInsightStatus", "Đang tải");
+    drawChartEmpty("overviewOpsChart", "Đang tải dữ liệu vận hành");
+    drawChartEmpty("overviewRevenueChart", "Đang tải dữ liệu doanh thu");
     employeePageInfo.textContent = "Đang tải phân trang";
     employeePrevBtn.disabled = true;
     employeeNextBtn.disabled = true;
@@ -1001,9 +1243,13 @@ function setLoadingState() {
 
 function renderApiError(message) {
     setText("overviewStatus", "Lỗi tải dữ liệu");
+    setText("overviewOpsChartMeta", "Lỗi tải dữ liệu");
+    setText("overviewRevenueChartMeta", "Lỗi tải dữ liệu");
     setText("productSource", "Lỗi tải dữ liệu");
     setText("employeeStatus", "Lỗi tải dữ liệu");
     setText("secondaryInsightStatus", "Lỗi tải dữ liệu");
+    drawChartEmpty("overviewOpsChart", message || "Không tải được dữ liệu vận hành");
+    drawChartEmpty("overviewRevenueChart", message || "Không tải được dữ liệu doanh thu");
     employeePageInfo.textContent = "Không tải được phân trang";
     employeePrevBtn.disabled = true;
     employeeNextBtn.disabled = true;
@@ -1793,6 +2039,10 @@ function renderOverviewRevenue(stats) {
     const count = summary.so_hoa_don ?? 0;
     const revenue = summary.tong_doanh_thu ?? 0;
 
+    overviewChartState.invoices = count;
+    overviewChartState.revenueStats = stats;
+    renderOverviewOpsChart();
+    renderOverviewRevenueChart(stats);
     setText("overviewInvoiceCount", numberFormatter.format(count));
     setText("overviewRevenueTotal", currencyFormatter.format(revenue || 0));
 
@@ -1884,6 +2134,17 @@ loadBranchData = async function () {
     await _originalLoadBranchData();
     await Promise.all([loadInvoices(), loadOverviewRevenue()]);
 };
+
+let overviewChartResizeTimer = null;
+window.addEventListener("resize", () => {
+    clearTimeout(overviewChartResizeTimer);
+    overviewChartResizeTimer = setTimeout(() => {
+        renderOverviewOpsChart();
+        if (overviewChartState.revenueStats) {
+            renderOverviewRevenueChart(overviewChartState.revenueStats);
+        }
+    }, 120);
+});
 
 // ===== Quản lý sản phẩm (chỉ trụ sở, nguồn main) =====
 

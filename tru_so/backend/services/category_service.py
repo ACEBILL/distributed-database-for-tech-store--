@@ -1,6 +1,9 @@
 from db import (
     build_pagination_meta,
+    execute_branch_db,
     execute_db,
+    get_branch_db_engine,
+    has_branch_db_settings,
     pagination_clause,
     parse_pagination,
     query_db,
@@ -64,6 +67,75 @@ def get_category_by_id_for_api(ma_loai_sp):
     )
 
 
+def _list_configured_branch_codes():
+    rows = query_db("SELECT ma_chi_nhanh FROM chi_nhanh ORDER BY ma_chi_nhanh")
+    return [
+        row["ma_chi_nhanh"]
+        for row in rows
+        if has_branch_db_settings(row["ma_chi_nhanh"])
+    ]
+
+
+def _category_upsert_sql(engine):
+    if engine == "mysql":
+        return """
+        INSERT INTO loai_sp (ma_loai_sp, ten_loai_sp, ma_chi_nhanh)
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            ten_loai_sp = VALUES(ten_loai_sp),
+            ma_chi_nhanh = VALUES(ma_chi_nhanh)
+        """
+
+    if engine == "postgresql":
+        return """
+        INSERT INTO loai_sp (ma_loai_sp, ten_loai_sp, ma_chi_nhanh)
+        VALUES (?, ?, ?)
+        ON CONFLICT (ma_loai_sp) DO UPDATE SET
+            ten_loai_sp = EXCLUDED.ten_loai_sp,
+            ma_chi_nhanh = EXCLUDED.ma_chi_nhanh
+        """
+
+    return """
+    MERGE loai_sp AS target
+    USING (
+        SELECT ? AS ma_loai_sp, ? AS ten_loai_sp, ? AS ma_chi_nhanh
+    ) AS source
+    ON target.ma_loai_sp = source.ma_loai_sp
+    WHEN MATCHED THEN
+        UPDATE SET
+            ten_loai_sp = source.ten_loai_sp,
+            ma_chi_nhanh = source.ma_chi_nhanh
+    WHEN NOT MATCHED THEN
+        INSERT (ma_loai_sp, ten_loai_sp, ma_chi_nhanh)
+        VALUES (source.ma_loai_sp, source.ten_loai_sp, source.ma_chi_nhanh);
+    """
+
+
+def sync_category_to_branches(category):
+    params = (
+        category["ma_loai_sp"],
+        category["ten_loai_sp"],
+        category["ma_chi_nhanh"],
+    )
+
+    for branch_code in _list_configured_branch_codes():
+        branch_engine = get_branch_db_engine(branch_code)
+        execute_branch_db(
+            branch_code,
+            _category_upsert_sql(branch_engine),
+            params,
+        )
+
+
+def delete_category_in_branches(ma_loai_sp):
+    for branch_code in _list_configured_branch_codes():
+        execute_branch_db(
+            branch_code,
+            "DELETE FROM loai_sp WHERE ma_loai_sp = ?",
+            (ma_loai_sp,),
+        )
+
+
 def create_category(data):
     required_fields = ["ma_loai_sp", "ten_loai_sp", "ma_chi_nhanh"]
     missing_fields = [field for field in required_fields if not data.get(field)]
@@ -77,7 +149,9 @@ def create_category(data):
         """,
         (data["ma_loai_sp"], data["ten_loai_sp"], data["ma_chi_nhanh"]),
     )
-    return get_category_by_id_for_api(data["ma_loai_sp"])
+    category = get_category_by_id_for_api(data["ma_loai_sp"])
+    sync_category_to_branches(category)
+    return category
 
 
 def update_category(ma_loai_sp, data):
@@ -103,7 +177,9 @@ def update_category(ma_loai_sp, data):
     )
     if affected_rows == 0:
         return None
-    return get_category_by_id_for_api(ma_loai_sp)
+    category = get_category_by_id_for_api(ma_loai_sp)
+    sync_category_to_branches(category)
+    return category
 
 
 def delete_category(ma_loai_sp):
@@ -111,4 +187,7 @@ def delete_category(ma_loai_sp):
         "DELETE FROM loai_sp WHERE ma_loai_sp = ?",
         (ma_loai_sp,),
     )
-    return affected_rows > 0
+    if affected_rows == 0:
+        return False
+    delete_category_in_branches(ma_loai_sp)
+    return True

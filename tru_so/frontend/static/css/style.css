@@ -379,6 +379,80 @@ a {
     margin-bottom: 20px;
 }
 
+.chart-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.chart-card {
+    min-width: 0;
+    padding: 18px;
+    background: #fff;
+    border: 1px solid #dde3ea;
+    border-radius: 8px;
+}
+
+.chart-card-header {
+    min-height: 48px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.chart-card h2 {
+    margin: 4px 0 0;
+    color: #20242a;
+    font-size: 16px;
+}
+
+.chart-kicker {
+    color: #2b7a6b;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.chart-meta {
+    color: #64717f;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.chart-card canvas {
+    width: 100%;
+    height: 240px;
+    display: block;
+}
+
+.chart-legend {
+    min-height: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin-top: 10px;
+    color: #4a5663;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--legend-color, #2b7a6b);
+}
+
 .metric,
 .section,
 .quick-item {
@@ -816,6 +890,7 @@ tr:last-child td {
         margin-top: 16px;
     }
     .summary-grid,
+    .chart-grid,
     .quick-grid,
     .form-grid {
         grid-template-columns: 1fr;
