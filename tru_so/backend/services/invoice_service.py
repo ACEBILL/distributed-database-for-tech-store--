@@ -2,10 +2,28 @@
 (qua query_branch_db) rồi tổng hợp lại cho UI / API trụ sở.
 """
 
+import logging
 from decimal import Decimal
 
-from db import get_branch_db_engine, has_branch_db_settings, query_branch_db
+from db import (
+    execute_branch_db,
+    execute_db,
+    get_branch_db_connection,
+    get_branch_db_engine,
+    has_branch_db_settings,
+    query_branch_db,
+)
+from services.branch_replication_service import (
+    backfill_invoice_replica,
+    get_replica_invoice_detail,
+    get_replica_invoices_from_branch,
+    get_replica_revenue_for_branch,
+    write_failover_invoice,
+)
 from services.branch_service import get_branch_by_id, get_branches
+
+
+log = logging.getLogger(__name__)
 
 
 def _to_float(value):
@@ -70,7 +88,9 @@ def get_invoices_from_branch(ma_chi_nhanh, args=None):
             tuple(params),
         )
     except Exception as exc:
-        return {"data": [], "branch_status": "unreachable", "error": str(exc)}
+        replica = get_replica_invoices_from_branch(ma_chi_nhanh, args)
+        replica["branch_error"] = str(exc)
+        return replica
 
     for row in rows:
         row["tong_tien"] = _to_float(row.get("tong_tien"))
@@ -89,36 +109,42 @@ def get_invoice_detail_from_branch(ma_chi_nhanh, ma_hd):
     if not _branch_ready(ma_chi_nhanh):
         return None
 
-    invoice = query_branch_db(
-        ma_chi_nhanh,
-        """
-        SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien, nv.ho_ten AS ten_nhan_vien,
-               hd.ten_kh, hd.sdt_kh, hd.tong_tien, hd.ghi_chu
-        FROM HOA_DON hd
-        LEFT JOIN NHAN_VIEN nv ON hd.ma_nhan_vien = nv.ma_nhan_vien
-        WHERE hd.ma_hd = ?
-        """,
-        (ma_hd,),
-        fetchone=True,
-    )
+    try:
+        invoice = query_branch_db(
+            ma_chi_nhanh,
+            """
+            SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien, nv.ho_ten AS ten_nhan_vien,
+                   hd.ten_kh, hd.sdt_kh, hd.tong_tien, hd.ghi_chu
+            FROM HOA_DON hd
+            LEFT JOIN NHAN_VIEN nv ON hd.ma_nhan_vien = nv.ma_nhan_vien
+            WHERE hd.ma_hd = ?
+            """,
+            (ma_hd,),
+            fetchone=True,
+        )
+    except Exception:
+        return get_replica_invoice_detail(ma_chi_nhanh, ma_hd)
     if not invoice:
         return None
     invoice["tong_tien"] = _to_float(invoice.get("tong_tien"))
     invoice["ngay_lap"] = _iso(invoice.get("ngay_lap"))
     invoice["ma_chi_nhanh"] = ma_chi_nhanh
 
-    items = query_branch_db(
-        ma_chi_nhanh,
-        """
-        SELECT ct.id, ct.ma_sp, sp.ten_sp,
-               ct.so_luong, ct.don_gia, ct.thanh_tien
-        FROM CT_HOA_DON ct
-        JOIN SAN_PHAM sp ON ct.ma_sp = sp.ma_sp
-        WHERE ct.ma_hd = ?
-        ORDER BY ct.id
-        """,
-        (ma_hd,),
-    )
+    try:
+        items = query_branch_db(
+            ma_chi_nhanh,
+            """
+            SELECT ct.id, ct.ma_sp, sp.ten_sp,
+                   ct.so_luong, ct.don_gia, ct.thanh_tien
+            FROM CT_HOA_DON ct
+            JOIN SAN_PHAM sp ON ct.ma_sp = sp.ma_sp
+            WHERE ct.ma_hd = ?
+            ORDER BY ct.id
+            """,
+            (ma_hd,),
+        )
+    except Exception:
+        return get_replica_invoice_detail(ma_chi_nhanh, ma_hd)
     for item in items:
         item["don_gia"] = _to_float(item.get("don_gia"))
         item["thanh_tien"] = _to_float(item.get("thanh_tien"))
@@ -127,6 +153,184 @@ def get_invoice_detail_from_branch(ma_chi_nhanh, ma_hd):
 
     invoice["chi_tiet"] = items
     return invoice
+
+
+def _validate_invoice_payload(data):
+    required = ["ma_hd", "ma_nhan_vien"]
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        raise ValueError("Thiếu trường bắt buộc: " + ", ".join(missing))
+
+    ma_hd = str(data.get("ma_hd") or "").strip()
+    if not ma_hd.isdigit() or int(ma_hd) <= 0:
+        raise ValueError("Mã hóa đơn phải là số nguyên dương")
+    data["ma_hd"] = ma_hd
+
+    items = data.get("items") or data.get("chi_tiet") or []
+    if not isinstance(items, list) or not items:
+        raise ValueError("Hóa đơn phải có ít nhất 1 chi tiết")
+
+    cleaned = []
+    for idx, raw in enumerate(items):
+        if not isinstance(raw, dict):
+            raise ValueError(f"items[{idx}] không hợp lệ")
+        ma_sp = raw.get("ma_sp")
+        if not ma_sp:
+            raise ValueError(f"items[{idx}].ma_sp là bắt buộc")
+        try:
+            so_luong = int(raw.get("so_luong", 0))
+            don_gia = float(raw.get("don_gia", 0))
+        except (TypeError, ValueError):
+            raise ValueError(f"items[{idx}] số lượng/đơn giá không hợp lệ")
+        if so_luong <= 0 or don_gia < 0:
+            raise ValueError(f"items[{idx}] số lượng phải > 0 và đơn giá >= 0")
+        cleaned.append({
+            "ma_sp": ma_sp,
+            "so_luong": so_luong,
+            "don_gia": don_gia,
+            "thanh_tien": round(so_luong * don_gia, 2),
+        })
+    return cleaned
+
+
+def _placeholder_sql(sql, engine):
+    return sql.replace("?", "%s") if engine in {"mysql", "postgresql"} else sql
+
+
+def _create_invoice_in_branch_db(ma_chi_nhanh, data, items):
+    """Tao hoa don thang vao DB chi nhanh (transactional). Raises neu DB khong reachable
+    hoac vi pham nghiep vu (employee/SP khong ton tai, ma_hd da co)."""
+    tong_tien = round(sum(item["thanh_tien"] for item in items), 2)
+
+    employee = query_branch_db(
+        ma_chi_nhanh,
+        "SELECT ma_nhan_vien FROM NHAN_VIEN WHERE ma_nhan_vien = ?",
+        (data["ma_nhan_vien"],),
+        fetchone=True,
+    )
+    if not employee:
+        raise ValueError(f"Nhân viên {data['ma_nhan_vien']} không tồn tại ở chi nhánh {ma_chi_nhanh}")
+
+    existing = query_branch_db(
+        ma_chi_nhanh,
+        "SELECT ma_hd FROM HOA_DON WHERE ma_hd = ?",
+        (data["ma_hd"],),
+        fetchone=True,
+    )
+    if existing:
+        raise ValueError(f"Mã hóa đơn {data['ma_hd']} đã tồn tại")
+
+    ma_sps = [item["ma_sp"] for item in items]
+    placeholders = ", ".join(["?"] * len(ma_sps))
+    found = query_branch_db(
+        ma_chi_nhanh,
+        f"SELECT ma_sp FROM SAN_PHAM WHERE ma_sp IN ({placeholders})",
+        tuple(ma_sps),
+    )
+    found_codes = {row["ma_sp"] for row in found}
+    missing_codes = [code for code in ma_sps if code not in found_codes]
+    if missing_codes:
+        raise ValueError("Sản phẩm không tồn tại ở chi nhánh: " + ", ".join(missing_codes))
+
+    engine = get_branch_db_engine(ma_chi_nhanh)
+    conn = get_branch_db_connection(ma_chi_nhanh)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            _placeholder_sql(
+                "INSERT INTO HOA_DON (ma_hd, ma_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                engine,
+            ),
+            (
+                data["ma_hd"],
+                data["ma_nhan_vien"],
+                data.get("ten_kh"),
+                data.get("sdt_kh"),
+                tong_tien,
+                data.get("ghi_chu"),
+            ),
+        )
+        for item in items:
+            cursor.execute(
+                _placeholder_sql(
+                    "INSERT INTO CT_HOA_DON (ma_hd, ma_sp, so_luong, don_gia, thanh_tien) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    engine,
+                ),
+                (data["ma_hd"], item["ma_sp"], item["so_luong"], item["don_gia"], item["thanh_tien"]),
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def create_failover_invoice_for_branch(ma_chi_nhanh, data):
+    """Tao hoa don khi backend chi nhanh chet:
+       1. Validate payload.
+       2. Neu DB chi nhanh reachable, ghi thang vao DB chi nhanh (HOA_DON + CT_HOA_DON)
+          → HQ tu dong thay du lieu moi qua doc realtime.
+       3. Neu DB chi nhanh cung khong reachable, fallback ghi vao replica + central_failover_events
+          → replay khi backend chi nhanh song lai.
+    """
+    items = _validate_invoice_payload(data)
+
+    try:
+        _create_invoice_in_branch_db(ma_chi_nhanh, data, items)
+    except ValueError:
+        raise
+    except Exception as exc:
+        log.warning(
+            "[failover-invoice] branch DB unreachable for %s, falling back to replica: %s",
+            ma_chi_nhanh,
+            exc,
+        )
+        payload = dict(data)
+        payload["items"] = items
+        result = write_failover_invoice(ma_chi_nhanh, "INVOICE_UPSERT", data.get("ma_hd"), payload)
+        if result:
+            result["branch_db_unreachable"] = True
+        return result
+
+    invoice = get_invoice_detail_from_branch(ma_chi_nhanh, data["ma_hd"])
+    if invoice:
+        try:
+            backfill_invoice_replica(ma_chi_nhanh, invoice, invoice.get("chi_tiet"))
+        except Exception as exc:
+            log.warning("[failover-invoice] replica sync failed for %s: %s", data["ma_hd"], exc)
+        invoice["source"] = "branch_database_via_hq"
+    return invoice
+
+
+def delete_failover_invoice_for_branch(ma_chi_nhanh, ma_hd):
+    """Xoa hoa don khi backend chi nhanh chet, write-through neu DB chi nhanh con song."""
+    try:
+        execute_branch_db(ma_chi_nhanh, "DELETE FROM CT_HOA_DON WHERE ma_hd = ?", (ma_hd,))
+        execute_branch_db(ma_chi_nhanh, "DELETE FROM HOA_DON WHERE ma_hd = ?", (ma_hd,))
+    except Exception as exc:
+        log.warning(
+            "[failover-invoice] branch DB unreachable for %s delete, falling back to replica: %s",
+            ma_chi_nhanh,
+            exc,
+        )
+        return write_failover_invoice(ma_chi_nhanh, "INVOICE_DELETE", ma_hd, {"ma_hd": ma_hd})
+
+    try:
+        branch = ma_chi_nhanh.upper()
+        execute_db(
+            "DELETE FROM branch_ct_hoa_don_replica WHERE ma_chi_nhanh = ? AND ma_hd = ?",
+            (branch, ma_hd),
+        )
+        execute_db(
+            "DELETE FROM branch_hoa_don_replica WHERE ma_chi_nhanh = ? AND ma_hd = ?",
+            (branch, ma_hd),
+        )
+    except Exception as exc:
+        log.warning("[failover-invoice] replica delete failed for %s: %s", ma_hd, exc)
+    return {"ma_hd": ma_hd, "source": "branch_database_via_hq"}
 
 
 def get_all_invoices_aggregated(args=None):
@@ -144,8 +348,10 @@ def get_all_invoices_aggregated(args=None):
             "ten_chi_nhanh": branch["ten_chi_nhanh"],
             "engine": get_branch_db_engine(ma),
             "branch_status": result.get("branch_status", "unknown"),
+            "source": result.get("source", "branch_database"),
             "so_hoa_don": len(result["data"]),
             "error": result.get("error"),
+            "branch_error": result.get("branch_error"),
         })
 
     aggregated.sort(key=lambda r: (r.get("ngay_lap") or "", r.get("ma_hd") or ""), reverse=True)
@@ -199,14 +405,9 @@ def _revenue_for_branch(ma_chi_nhanh):
             "theo_san_pham": theo_sp,
         }
     except Exception as exc:
-        return {
-            "branch_status": "unreachable",
-            "error": str(exc),
-            "so_hoa_don": 0,
-            "tong_doanh_thu": 0,
-            "theo_ngay": [],
-            "theo_san_pham": [],
-        }
+        replica = get_replica_revenue_for_branch(ma_chi_nhanh)
+        replica["branch_error"] = str(exc)
+        return replica
 
 
 def get_revenue_for_branch(ma_chi_nhanh):
@@ -237,12 +438,14 @@ def get_revenue_aggregated():
             "ten_chi_nhanh": branch["ten_chi_nhanh"],
             "engine": get_branch_db_engine(ma),
             "branch_status": data["branch_status"],
+            "source": data.get("source", "branch_database"),
             "so_hoa_don": data["so_hoa_don"],
             "tong_doanh_thu": data["tong_doanh_thu"],
             "error": data.get("error"),
+            "branch_error": data.get("branch_error"),
         })
 
-        if data["branch_status"] != "ok":
+        if data["branch_status"] not in ("ok", "replica"):
             continue
 
         tong_hd += data["so_hoa_don"]

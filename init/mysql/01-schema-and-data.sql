@@ -183,7 +183,8 @@ INSERT IGNORE INTO NHAN_VIEN (
 ('NV002', 'Trần Thị Mai', '001099002002', '0901000002', 25000000, UPPER(SHA2('pass123', 256)), 1, 2, 200, 'truong_phong', '2020-06-01', NULL),
 ('NV003', 'Lê Hoàng Nam', '001099003003', '0901000003', 18000000, UPPER(SHA2('pass123', 256)), 1, 2, 180, 'pho_phong', '2021-01-15', NULL),
 ('NV004', 'Phạm Thị Hương', '001099004004', '0901000004', 12000000, UPPER(SHA2('pass123', 256)), 1, 2, 150, 'nhan_vien', '2022-03-01', NULL),
-('NV005', 'Hoàng Đức Anh', '001099005005', '0901000005', 12000000, UPPER(SHA2('pass123', 256)), 1, 3, 140, 'nhan_vien', '2022-06-15', NULL);
+('NV005', 'Hoàng Đức Anh', '001099005005', '0901000005', 12000000, UPPER(SHA2('pass123', 256)), 1, 3, 140, 'nhan_vien', '2022-06-15', NULL),
+('CN001', 'Tai khoan demo CN001', '000000000001', '0900000001', 50000000, UPPER(SHA2('pass123', 256)), 1, 1, 250, 'giam_doc', '2020-01-01', NULL);
 
 UPDATE phong_ban SET ma_nv = 2 WHERE ma_pb = 2;
 UPDATE phong_ban SET ma_nv = 3 WHERE ma_pb = 3;

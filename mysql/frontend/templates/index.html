@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tech Store Portal</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
+
 <body>
     <main id="portalPickerView" class="login-shell hidden">
         <section class="portal-panel">
@@ -81,10 +83,6 @@
                     <span class="nav-icon">⌂</span>
                     <span>Tổng quan</span>
                 </button>
-                <button class="nav-item" type="button" data-view="branchesView" data-central-only>
-                    <span class="nav-icon">⌬</span>
-                    <span>Chi nhánh</span>
-                </button>
                 <button class="nav-item" type="button" data-view="productsView">
                     <span class="nav-icon">□</span>
                     <span>Sản phẩm</span>
@@ -97,24 +95,6 @@
                     <span class="nav-icon">◉</span>
                     <span>Nhân viên</span>
                 </button>
-                <div id="employeeSubmenu" class="nav-submenu" data-central-only>
-                    <button
-                        id="employeeCentralNav"
-                        class="nav-subitem active"
-                        type="button"
-                        data-employee-source="central"
-                    >
-                        Nhân viên trụ sở
-                    </button>
-                    <button
-                        id="employeeBranchNav"
-                        class="nav-subitem"
-                        type="button"
-                        data-employee-source="branch"
-                    >
-                        Nhân viên chi nhánh
-                    </button>
-                </div>
             </nav>
 
             <div class="sidebar-footer">
@@ -313,8 +293,7 @@
                             </div>
                         </div>
                         <p style="margin-top:-8px; color:#556170; font-size:13px;">
-                            Quan hệ <strong>1–N</strong>: một SP của trụ sở có thể được nhập về nhiều chi nhánh.
-                            Bấm "Nhập" để kéo về chi nhánh hiện tại (không phát event ngược lại trụ sở).
+                            Quan hệ <strong>1–N</strong>: một SP của trụ sở có thể được nhập về nhiều chi nhánh. Bấm "Nhập" để kéo về chi nhánh hiện tại (không phát event ngược lại trụ sở).
                         </p>
                         <div class="table-wrap">
                             <table>
@@ -481,7 +460,7 @@
                             <div class="form-grid">
                                 <label class="field">
                                     <span>Mã hóa đơn</span>
-                                    <input id="invoiceFormCode" name="ma_hd" type="text" required>
+                                    <input id="invoiceFormCode" name="ma_hd" type="number" min="1" step="1" inputmode="numeric" required>
                                 </label>
                                 <label class="field">
                                     <span>Nhân viên lập</span>
@@ -706,4 +685,5 @@
     <script src="/config.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
+
 </html>

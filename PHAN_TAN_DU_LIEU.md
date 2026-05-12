@@ -21,6 +21,13 @@ Trụ sở không chỉ đọc SQL Server. Backend trụ sở có middleware đa
 - `query_branch_db(ma_chi_nhanh, ...)` / `execute_branch_db(ma_chi_nhanh, ...)` tra cấu hình branch từ biến môi trường rồi kết nối đúng MySQL/PostgreSQL.
 - Client gọi API trụ sở không cần biết dữ liệu đang nằm ở SQL Server, MySQL hay PostgreSQL. Đây là location transparency ở tầng API.
 
+Nguyên tắc nghiệp vụ quan trọng:
+
+- Trụ sở là node điều phối và báo cáo toàn hệ thống. Trụ sở quản lý catalog sản phẩm, danh mục dùng chung, xem/tổng hợp thông tin nhân viên và doanh thu của các chi nhánh.
+- CN01 và CN02 là hai cửa hàng độc lập. Dữ liệu vận hành của CN01 thuộc CN01; dữ liệu vận hành của CN02 thuộc CN02. Hai chi nhánh không ghi trực tiếp dữ liệu nghiệp vụ của nhau trong chế độ bình thường.
+- Chi nhánh quản lý nhân viên, hóa đơn và nghiệp vụ bán hàng phát sinh tại chính chi nhánh đó. Dữ liệu cần cho báo cáo toàn hệ thống được trụ sở đọc/tổng hợp hoặc nhận qua cơ chế đồng bộ.
+- Nếu bổ sung replica/failover giữa các chi nhánh, bản sao dữ liệu chi nhánh khác chỉ nên dùng cho đọc dự phòng hoặc chỉ được ghi khi có cơ chế chuyển quyền xử lý rõ ràng. Không coi CN01 và CN02 là một kho dữ liệu dùng chung.
+
 ## 2. Phân bố dữ liệu theo bảng
 
 | Bảng / nhóm dữ liệu | Trụ sở SQL Server | CN01 MySQL | CN02 PostgreSQL | Kiểu phân tán |
@@ -28,14 +35,14 @@ Trụ sở không chỉ đọc SQL Server. Backend trụ sở có middleware đa
 | `chi_nhanh` | Master | Seed/reference local | Seed/reference local | Dữ liệu tham chiếu |
 | `loai_sp` | Master | Bản sao local | Bản sao local | Dữ liệu tham chiếu, có replicate |
 | `NCC` | Master/seed | Seed local | Seed local | Dữ liệu tham chiếu, hiện chưa có sync tự động |
-| `SAN_PHAM` | Master catalog | Replica + có thể ghi cục bộ | Replica + có thể ghi cục bộ | Replication theo event |
+| `SAN_PHAM` | Master catalog | Replica catalog để bán hàng/đọc local | Replica catalog để bán hàng/đọc local | Replication một chiều từ trụ sở |
 | `NHAN_VIEN` | Nhân viên trụ sở | Nhân viên CN01 | Nhân viên CN02 | Phân mảnh ngang |
 | `phong_ban` | Phòng ban trụ sở | Phòng ban CN01 | Phòng ban CN02 | Phân mảnh ngang/reference local |
 | `HOA_DON`, `CT_HOA_DON` | Không lưu local | Hóa đơn CN01 | Hóa đơn CN02 | Phân mảnh ngang theo chi nhánh |
 | `product_sync_events` | Có | Không | Không | Outbox trụ sở -> chi nhánh |
 | `sync_log` | Không | Có | Có | Idempotency/audit event nhận từ trụ sở |
-| `branch_sync_events` | Không | Có | Có | Outbox chi nhánh -> trụ sở |
-| `branch_received_events` | Có | Không | Không | Idempotency/audit event nhận từ chi nhánh |
+| `branch_sync_events` | Không | Có thể có nếu mở rộng | Có thể có nếu mở rộng | Dự phòng cho luồng chi nhánh gửi dữ liệu/event lên trụ sở |
+| `branch_received_events` | Có thể có nếu mở rộng | Không | Không | Audit/idempotency khi trụ sở nhận event từ chi nhánh |
 
 ## 3. Luồng dữ liệu sản phẩm
 
@@ -54,16 +61,11 @@ Trụ sở không chỉ đọc SQL Server. Backend trụ sở có middleware đa
 
 Kết quả: `SAN_PHAM` là bảng master ở trụ sở, nhưng được replicate xuống các chi nhánh để chi nhánh đọc nhanh và bán hàng ngay cả khi không cần join trực tiếp về SQL Server.
 
-### 3.2. Chi nhánh tạo/sửa/xóa sản phẩm
+### 3.2. Vai trò của chi nhánh với sản phẩm
 
-1. API chi nhánh ghi `SAN_PHAM` local.
-2. Backend chi nhánh tạo event trong `branch_sync_events`.
-3. `mysql-service`/`postgre-service` forward event lên `tru-so-service`.
-4. Trụ sở gọi internal API `/api/internal/products/apply-change`.
-5. SQL Server apply thay đổi vào `SAN_PHAM`, ghi `branch_received_events`.
-6. Sau khi apply thành công, trụ sở fan-out tiếp event sang các chi nhánh khác, loại trừ chi nhánh nguồn để tránh vòng lặp.
+Theo nghiệp vụ hiện tại, chi nhánh không phải nơi quản lý master sản phẩm. CN01/CN02 dùng bản sao `SAN_PHAM` local để tra cứu, lập hóa đơn và bán hàng khi vận hành tại cửa hàng.
 
-Kết quả: sản phẩm có khả năng đồng bộ hai chiều. Trụ sở vẫn là nơi hợp nhất, còn chi nhánh có quyền tạo/sửa/xóa sản phẩm local và đẩy lên trung tâm.
+Nếu chi nhánh cần đề xuất sản phẩm mới hoặc báo thông tin thay đổi, luồng đúng nên là gửi yêu cầu/event lên trụ sở để duyệt và cập nhật master catalog. Sau đó trụ sở mới phát event xuống các chi nhánh. Cách này giữ rõ quyền sở hữu dữ liệu: trụ sở sở hữu catalog, chi nhánh sở hữu nghiệp vụ bán hàng của mình.
 
 ## 4. Luồng dữ liệu danh mục `loai_sp`
 
@@ -100,13 +102,15 @@ Trụ sở có thể đọc nhân viên chi nhánh bằng `query_branch_db()`:
 - `GET /api/chi-nhanh/<ma_chi_nhanh>/nhan-vien` đọc trực tiếp từ DB chi nhánh.
 - `GET /api/nhan-vien/tat-ca-chi-nhanh` gom dữ liệu từ SQL Server + MySQL + PostgreSQL, gắn thêm `source_node` và `db_engine`.
 
-Trụ sở cũng có API ghi nhân viên vào chi nhánh qua `execute_branch_db()`:
+Trong code hiện tại, trụ sở cũng có API ghi nhân viên vào chi nhánh qua `execute_branch_db()`:
 
 - `create_employee_in_branch()`
 - `update_employee_in_branch()`
 - `soft_delete_employee_in_branch()`
 
-Đánh giá: cách này hợp lý cho nhân sự vì nhân viên gắn với nơi làm việc, ít cần replicate toàn bộ sang các node khác. Khi cần báo cáo toàn cục, trụ sở query phân tán và merge response.
+Về nghiệp vụ, nên hiểu đây là quyền quản trị/gateway của trụ sở, không phải trụ sở sở hữu dữ liệu nhân viên chi nhánh. Chủ sở hữu vận hành của nhân viên CN01 là CN01, chủ sở hữu vận hành của nhân viên CN02 là CN02.
+
+Đánh giá: cách này hợp lý cho nhân sự vì nhân viên gắn với nơi làm việc. Nhân viên CN01 và nhân viên CN02 là hai phân mảnh độc lập, không phải dữ liệu dùng chung giữa hai cửa hàng. Khi cần báo cáo toàn cục, trụ sở query phân tán và merge response.
 
 ## 6. Luồng dữ liệu hóa đơn và doanh thu
 
@@ -120,6 +124,8 @@ Hóa đơn là dữ liệu vận hành cục bộ của chi nhánh:
   - tổng hợp doanh thu tất cả chi nhánh.
 
 Đánh giá: đây là phân mảnh ngang đúng với nghiệp vụ bán lẻ, vì hóa đơn phát sinh tại chi nhánh. Tuy nhiên nếu số chi nhánh lớn, query tổng hợp trực tiếp tất cả DB sẽ chậm; nên có kho dữ liệu báo cáo hoặc job ETL riêng.
+
+Điểm cần làm rõ: hóa đơn CN01 và hóa đơn CN02 độc lập nhau. CN01 không tạo/sửa hóa đơn CN02 trong chế độ bình thường và ngược lại. Trụ sở chỉ đọc/tổng hợp doanh thu để báo cáo, không biến dữ liệu hóa đơn của hai chi nhánh thành một bảng vận hành chung.
 
 ## 7. Truy vấn phân tán và thống kê phân mảnh
 
@@ -145,8 +151,8 @@ Các bảng hỗ trợ:
 
 - `product_sync_events`: outbox trụ sở, có `status`, `message`, `retry_count`, `last_error`.
 - `sync_log`: log chi nhánh đã nhận/applied event nào.
-- `branch_sync_events`: outbox chi nhánh khi chi nhánh thay đổi sản phẩm.
-- `branch_received_events`: log trụ sở đã nhận/applied event nào từ chi nhánh.
+- `branch_sync_events`: outbox chi nhánh nếu mở rộng luồng gửi dữ liệu/event vận hành lên trụ sở.
+- `branch_received_events`: log trụ sở đã nhận/applied event nào từ chi nhánh nếu dùng event chi nhánh -> trụ sở.
 
 Có retry failed event và dead letter sau số lần retry tối đa. Cách này hợp lý hơn việc gọi trực tiếp DB chi nhánh trong cùng transaction vì giảm coupling và cho phép chi nhánh tạm thời mất kết nối.
 
@@ -156,7 +162,7 @@ Có retry failed event và dead letter sau số lần retry tối đa. Cách nà
 
 - Dùng mô hình dị hệ quản trị CSDL rõ ràng: SQL Server, MySQL, PostgreSQL.
 - Phân mảnh ngang `NHAN_VIEN`, `HOA_DON` theo chi nhánh là đúng với nghiệp vụ.
-- `SAN_PHAM` replicate xuống chi nhánh giúp đọc local nhanh và chi nhánh có thể vận hành độc lập hơn.
+- `SAN_PHAM` replicate xuống chi nhánh giúp đọc local nhanh và chi nhánh có thể bán hàng độc lập hơn, trong khi master catalog vẫn thuộc trụ sở.
 - Outbox + `sync_log` tạo audit trail và idempotency, phù hợp với đồng bộ bất đồng bộ.
 - API trụ sở che giấu vị trí vật lý của DB qua `query_branch_db`, tốt cho location transparency.
 - Thống kê phân mảnh và distributed query là bằng chứng tốt cho đồ án CSDL phân tán.
@@ -168,16 +174,97 @@ Có retry failed event và dead letter sau số lần retry tối đa. Cách nà
 - `loai_sp` đã sync create/update/delete trực tiếp, nhưng chưa có outbox/retry riêng; hard delete category có thể gây lỗi FK nếu chi nhánh còn sản phẩm liên quan.
 - Dispatch sản phẩm đang tạo event per branch và gọi service ngay trong request. Nếu branch chậm, request có thể bị ảnh hưởng; outbox nên tách worker nền đọc pending event.
 - Distributed query nhân viên/doanh thu đang đọc tuần tự từng node. Khi số chi nhánh tăng, độ trễ tăng tuyến tính.
-- Chưa có conflict resolution rõ ràng nếu cùng một `ma_sp` bị sửa gần đồng thời ở trụ sở và chi nhánh. Hiện `version` mang tính thứ tự event, nhưng chưa có rule "last-write-wins" hoặc field-level merge chính thức.
-- Hiện có replication sản phẩm hai chiều, trong khi danh mục/NCC lại chủ yếu một chiều/seed. Các bảng tham chiếu cần chính sách nhất quán hơn.
+- Nếu sau này cho chi nhánh đề xuất/sửa sản phẩm rồi gửi lên trụ sở, cần có workflow duyệt hoặc conflict rule rõ ràng. Với nghiệp vụ hiện tại, cách đơn giản hơn là giữ sản phẩm một chiều: trụ sở sửa master, chi nhánh nhận bản sao.
+- Nếu bật luồng chi nhánh gửi thay đổi sản phẩm lên trụ sở, cần ràng buộc lại quyền sở hữu dữ liệu để không phá vỡ nguyên tắc trụ sở là master catalog.
 - Một số endpoint branch bắt lỗi sync bằng `except Exception: pass` khi tạo event lên trụ sở. Cách này giúp API không fail, nhưng có thể che giấu việc đồng bộ thất bại nếu không theo dõi `branch_sync_events`.
 
-## 10. Kết luận
+## 10. Phương án chịu lỗi khi server chi nhánh sập
+
+Nếu mục tiêu là: trụ sở vẫn hoạt động, một chi nhánh bị sập nhưng người dùng của chi nhánh đó vẫn có thể làm việc gần như bình thường, phương án đơn giản và phù hợp nhất với kiến trúc hiện tại là **replica dữ liệu vận hành của chi nhánh lên trụ sở**.
+
+### 10.1. Nguyên tắc
+
+- Chế độ bình thường: CN01/CN02 vẫn là owner dữ liệu vận hành của chính mình.
+- Trụ sở giữ bản sao gần thời gian thực của dữ liệu chi nhánh để báo cáo và dự phòng.
+- Khi một chi nhánh sập, trụ sở được chuyển sang vai trò `acting-owner` tạm thời cho chi nhánh đó.
+- Khi chi nhánh sống lại, các thay đổi phát sinh tại trụ sở trong thời gian failover được đẩy ngược về DB chi nhánh.
+
+Mô hình này dễ hơn việc để CN01 và CN02 replicate chéo toàn bộ dữ liệu cho nhau, vì chỉ cần một điểm dự phòng trung tâm và tránh biến các chi nhánh độc lập thành một cụm active-active phức tạp.
+
+### 10.2. Dữ liệu cần replicate lên trụ sở
+
+Các bảng nên replicate từ chi nhánh lên SQL Server trụ sở:
+
+| Dữ liệu | Owner bình thường | Replica tại trụ sở | Mục đích |
+| --- | --- | --- | --- |
+| `NHAN_VIEN` | Chi nhánh | Có | Quản trị, xem nhân sự, failover |
+| `phong_ban` | Chi nhánh | Có | Tham chiếu nhân viên |
+| `HOA_DON` | Chi nhánh | Có | Báo cáo doanh thu, failover bán hàng |
+| `CT_HOA_DON` | Chi nhánh | Có | Chi tiết hóa đơn, doanh thu theo sản phẩm |
+| `SAN_PHAM` | Trụ sở | Master sẵn có | Catalog bán hàng |
+
+Trên SQL Server có thể tạo các bảng replica riêng, ví dụ:
+
+- `branch_nhan_vien_replica`
+- `branch_phong_ban_replica`
+- `branch_hoa_don_replica`
+- `branch_ct_hoa_don_replica`
+- `branch_replication_inbox`
+- `central_failover_events`
+
+Mỗi bảng replica cần có `ma_chi_nhanh`, `source_branch`, `updated_at`, `version` hoặc `event_id` để biết dữ liệu thuộc chi nhánh nào và chống apply trùng.
+
+### 10.3. Luồng bình thường
+
+1. CN01 tạo/sửa nhân viên hoặc hóa đơn trong MySQL local.
+2. CN01 ghi thêm event vào outbox local, ví dụ `branch_sync_events`.
+3. `mysql-service` gửi event lên `tru-so-service`.
+4. Trụ sở kiểm tra `event_id` trong `branch_replication_inbox`.
+5. Nếu chưa nhận, trụ sở upsert dữ liệu vào bảng replica SQL Server.
+6. Trụ sở dùng replica này cho báo cáo nhanh, thay vì lúc nào cũng query trực tiếp DB chi nhánh.
+
+CN02 làm tương tự với PostgreSQL.
+
+### 10.4. Luồng khi chi nhánh sập
+
+Ví dụ CN01 sập nhưng trụ sở còn hoạt động:
+
+1. Healthcheck phát hiện `mysql-backend` hoặc MySQL CN01 không truy cập được.
+2. Trụ sở đánh dấu trạng thái `CN01 = failover_to_hq`.
+3. Người dùng CN01 đăng nhập vào portal/API dự phòng tại trụ sở.
+4. Các thao tác của CN01 trong thời gian sự cố được ghi vào bảng replica tại trụ sở với `ma_chi_nhanh = 'CN01'`.
+5. Đồng thời trụ sở ghi event vào `central_failover_events`.
+6. Khi CN01 hoạt động lại, trụ sở replay `central_failover_events` về MySQL CN01.
+7. Sau khi CN01 bắt kịp dữ liệu, trạng thái chuyển lại `CN01 = normal`.
+
+Điểm quan trọng: trong thời gian failover, chỉ trụ sở được phép ghi thay CN01. Điều này tránh lỗi split-brain, tức là CN01 thật và trụ sở cùng ghi dữ liệu CN01 rồi xung đột khi kết nối lại.
+
+### 10.5. Điều kiện để chi nhánh "hoạt động bình thường"
+
+Chỉ replicate dữ liệu là chưa đủ. Khi server chi nhánh sập, người dùng cần có đường truy cập thay thế:
+
+- frontend/API dự phòng tại trụ sở cho từng chi nhánh,
+- routing hoặc link dự phòng, ví dụ `/failover/cn01`,
+- xác thực người dùng chi nhánh bằng dữ liệu replica tại trụ sở,
+- quyền ghi tạm thời theo trạng thái failover.
+
+Với điều kiện trụ sở không sập, cách này đáp ứng tốt tiêu chí: một server chi nhánh bị sập nhưng chi nhánh đó vẫn có thể tiếp tục bán hàng/quản lý hóa đơn/nhân viên qua trụ sở, sau đó đồng bộ ngược khi server chi nhánh phục hồi.
+
+### 10.6. Phần đã triển khai trong repository
+
+- Backend chi nhánh có `services/branch_replication_service.py` để tạo outbox `branch_replication_events`.
+- Khi chi nhánh tạo/cập nhật/ngưng nhân viên hoặc tạo/xóa hóa đơn, backend chi nhánh phát event replication lên `mysql-service` / `postgre-service`.
+- `tru-so-service` nhận event tại `/api/service/branch-replication/receive-from-branch` và forward vào backend trụ sở.
+- Backend trụ sở apply event vào các bảng replica SQL Server: `branch_employee_replica`, `branch_hoa_don_replica`, `branch_ct_hoa_don_replica`; bảng `branch_replication_inbox` chống nhận trùng event.
+- Khi API trụ sở đọc nhân viên/hóa đơn/doanh thu của chi nhánh mà DB chi nhánh không truy cập được, hệ thống fallback sang replica tại trụ sở và trả `source = hq_replica`.
+- Trụ sở có endpoint failover hóa đơn: `POST /api/chi-nhanh/<ma_chi_nhanh>/hoa-don/failover` và `DELETE /api/chi-nhanh/<ma_chi_nhanh>/hoa-don/<ma_hd>/failover`. Các API nhân viên theo chi nhánh cũng fallback ghi vào replica nếu DB chi nhánh lỗi.
+
+## 11. Kết luận
 
 Thiết kế hiện tại là hợp lý cho một đồ án CSDL phân tán cấp chuỗi cửa hàng:
 
 - `NHAN_VIEN` và `HOA_DON` nên phân mảnh ngang theo chi nhánh.
-- `SAN_PHAM` nên replicate xuống chi nhánh để hỗ trợ đọc local và bán hàng.
+- `SAN_PHAM` nên replicate một chiều từ trụ sở xuống chi nhánh để hỗ trợ đọc local và bán hàng.
 - `loai_sp`, `NCC`, `chi_nhanh` là reference data nên cần có chiến lược sync từ trụ sở xuống chi nhánh.
 - Trụ sở đóng vai trò aggregator và coordinator là phù hợp.
 
@@ -189,5 +276,5 @@ Nếu nâng lên gần production, nên ưu tiên:
 2. Đổi xóa `loai_sp` sang soft delete hoặc thêm pre-check sản phẩm trên tất cả chi nhánh trước khi hard delete.
 3. Tách worker nền xử lý `product_sync_events` và `branch_sync_events`.
 4. Chạy distributed query song song thay vì tuần tự.
-5. Thêm conflict resolution cho sửa sản phẩm hai chiều.
+5. Nếu mở rộng luồng chi nhánh đề xuất/sửa sản phẩm, thêm workflow duyệt hoặc conflict rule trước khi ghi vào master catalog.
 6. Thêm dashboard theo dõi pending/failed/dead-letter event.

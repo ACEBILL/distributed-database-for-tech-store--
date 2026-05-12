@@ -11,6 +11,11 @@ from db import (
     query_branch_db,
     query_db,
 )
+from services.branch_replication_service import (
+    get_replica_employee_by_id,
+    get_replica_employees_for_api,
+    write_failover_employee,
+)
 
 
 EMPLOYEE_COLUMNS_SQL = """
@@ -114,13 +119,16 @@ def get_employee_by_id_for_api(ma_nhan_vien):
 
 
 def get_employee_by_id_from_branch_database_for_api(ma_chi_nhanh, ma_nhan_vien):
-    employee = query_branch_db(
-        ma_chi_nhanh,
-        EMPLOYEE_SELECT_SQL + " WHERE nv.ma_nhan_vien = ?",
-        (ma_nhan_vien,),
-        fetchone=True,
-    )
-    return format_employee(employee)
+    try:
+        employee = query_branch_db(
+            ma_chi_nhanh,
+            EMPLOYEE_SELECT_SQL + " WHERE nv.ma_nhan_vien = ?",
+            (ma_nhan_vien,),
+            fetchone=True,
+        )
+        return format_employee(employee)
+    except Exception:
+        return get_replica_employee_by_id(ma_chi_nhanh, ma_nhan_vien)
 
 
 def get_all_employees_for_api(args=None):
@@ -217,11 +225,21 @@ def create_employee(data):
 
 def create_employee_in_branch(ma_chi_nhanh, data):
     branch_engine = get_branch_db_engine(ma_chi_nhanh)
-    _create_employee_with_executor(
-        lambda sql, params=None: execute_branch_db(ma_chi_nhanh, sql, params),
-        password_hash_sql(branch_engine),
-        data,
-    )
+    try:
+        _create_employee_with_executor(
+            lambda sql, params=None: execute_branch_db(ma_chi_nhanh, sql, params),
+            password_hash_sql(branch_engine),
+            data,
+        )
+    except Exception:
+        payload = dict(data)
+        payload["ma_chi_nhanh"] = ma_chi_nhanh
+        return write_failover_employee(
+            ma_chi_nhanh,
+            "EMPLOYEE_UPSERT",
+            data["ma_nhan_vien"],
+            payload,
+        )
     return get_employee_by_id_from_branch_database_for_api(
         ma_chi_nhanh,
         data["ma_nhan_vien"],
@@ -274,11 +292,24 @@ def update_employee_in_branch(ma_chi_nhanh, ma_nhan_vien, data):
         password_hash_sql(branch_engine),
     )
     params.append(ma_nhan_vien)
-    affected_rows = execute_branch_db(
-        ma_chi_nhanh,
-        f"UPDATE NHAN_VIEN SET {', '.join(assignments)} WHERE ma_nhan_vien = ?",
-        tuple(params),
-    )
+    try:
+        affected_rows = execute_branch_db(
+            ma_chi_nhanh,
+            f"UPDATE NHAN_VIEN SET {', '.join(assignments)} WHERE ma_nhan_vien = ?",
+            tuple(params),
+        )
+    except Exception:
+        current = get_replica_employee_by_id(ma_chi_nhanh, ma_nhan_vien) or {
+            "ma_nhan_vien": ma_nhan_vien,
+        }
+        current.update(data)
+        current["ma_chi_nhanh"] = ma_chi_nhanh
+        return write_failover_employee(
+            ma_chi_nhanh,
+            "EMPLOYEE_UPSERT",
+            ma_nhan_vien,
+            current,
+        )
 
     if affected_rows == 0:
         return None
@@ -300,15 +331,26 @@ def soft_delete_employee(ma_nhan_vien):
 
 def soft_delete_employee_in_branch(ma_chi_nhanh, ma_nhan_vien):
     branch_engine = get_branch_db_engine(ma_chi_nhanh)
-    affected_rows = execute_branch_db(
-        ma_chi_nhanh,
-        """
-        UPDATE NHAN_VIEN
-        SET trang_thai = 0, ngay_ket_thuc = COALESCE(ngay_ket_thuc, {now})
-        WHERE ma_nhan_vien = ?
-        """.format(now=now_sql(branch_engine)),
-        (ma_nhan_vien,),
-    )
+    try:
+        affected_rows = execute_branch_db(
+            ma_chi_nhanh,
+            """
+            UPDATE NHAN_VIEN
+            SET trang_thai = 0, ngay_ket_thuc = COALESCE(ngay_ket_thuc, {now})
+            WHERE ma_nhan_vien = ?
+            """.format(now=now_sql(branch_engine)),
+            (ma_nhan_vien,),
+        )
+    except Exception:
+        return bool(
+            write_failover_employee(
+                ma_chi_nhanh,
+                "EMPLOYEE_DELETE",
+                ma_nhan_vien,
+                get_replica_employee_by_id(ma_chi_nhanh, ma_nhan_vien)
+                or {"ma_nhan_vien": ma_nhan_vien},
+            )
+        )
     return affected_rows > 0
 
 
@@ -343,12 +385,15 @@ def get_employees_from_branch_database_for_api(ma_chi_nhanh, args=None):
     page, limit, offset = parse_pagination(args)
     branch_engine = get_branch_db_engine(ma_chi_nhanh)
 
-    total_row = query_branch_db(
-        ma_chi_nhanh,
-        "SELECT COUNT(*) AS total " + EMPLOYEE_FROM_SQL + where_sql,
-        tuple(where_params),
-        fetchone=True,
-    )
+    try:
+        total_row = query_branch_db(
+            ma_chi_nhanh,
+            "SELECT COUNT(*) AS total " + EMPLOYEE_FROM_SQL + where_sql,
+            tuple(where_params),
+            fetchone=True,
+        )
+    except Exception:
+        return get_replica_employees_for_api(ma_chi_nhanh, args)
     total = total_row["total"] if total_row else 0
     if total > 0:
         max_page = ((total - 1) // limit) + 1
@@ -363,11 +408,14 @@ def get_employees_from_branch_database_for_api(ma_chi_nhanh, args=None):
         limit,
         branch_engine,
     )
-    employees = query_branch_db(
-        ma_chi_nhanh,
-        EMPLOYEE_SELECT_SQL + where_sql + page_clause,
-        tuple(where_params) + page_params,
-    )
+    try:
+        employees = query_branch_db(
+            ma_chi_nhanh,
+            EMPLOYEE_SELECT_SQL + where_sql + page_clause,
+            tuple(where_params) + page_params,
+        )
+    except Exception:
+        return get_replica_employees_for_api(ma_chi_nhanh, args)
     for employee in employees:
         format_employee(employee)
 
@@ -436,7 +484,19 @@ def get_all_employees_distributed_for_api():
             nodes[ma] = {"db_engine": engine, "count": len(employees), "data": employees}
             all_data.extend(employees)
         except Exception as exc:
-            nodes[ma] = {"db_engine": engine, "count": 0, "data": [], "error": str(exc)}
+            replica = get_replica_employees_for_api(ma, {})
+            replica_data = replica.get("data", [])
+            if replica_data:
+                nodes[ma] = {
+                    "db_engine": "sqlserver_replica",
+                    "count": len(replica_data),
+                    "data": replica_data,
+                    "source": "hq_replica",
+                    "branch_error": str(exc),
+                }
+                all_data.extend(replica_data)
+            else:
+                nodes[ma] = {"db_engine": engine, "count": 0, "data": [], "error": str(exc)}
 
     return {
         "query_type": "distributed_query",

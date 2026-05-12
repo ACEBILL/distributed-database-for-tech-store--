@@ -184,5 +184,35 @@ def dispatch_product_to_hq():
     return jsonify(result)
 
 
+@app.post("/api/service/branch-replication/dispatch-to-hq")
+def dispatch_branch_replication_to_hq():
+    """Nhận event vận hành từ chi nhánh và forward lên tru-so-service."""
+    if not _service_authorized():
+        return jsonify({"success": False, "message": "Invalid service token"}), 403
+
+    event = request.get_json(silent=True) or {}
+    hq_url = _peer_services().get("tru_so")
+    if not hq_url:
+        return jsonify({"success": False, "message": "tru_so peer not configured"}), 400
+
+    try:
+        body = json.dumps(event, ensure_ascii=False).encode("utf-8")
+        req = Request(
+            f"{hq_url}/api/service/branch-replication/receive-from-branch",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "X-Service-Token": _service_token(),
+            },
+            method="POST",
+        )
+        with urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+    except (OSError, URLError, TimeoutError) as exc:
+        return jsonify({"success": False, "message": str(exc)}), 502
+
+    return jsonify(result)
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

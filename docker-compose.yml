@@ -286,6 +286,7 @@ services:
       dockerfile: Dockerfile
       args:
         API_UPSTREAM: http://mysql-backend:5000
+        API_FALLBACK_UPSTREAM: http://tru-so-backend:5000
     container_name: mysql-frontend
     restart: unless-stopped
     ports:
@@ -301,6 +302,7 @@ services:
       dockerfile: Dockerfile
       args:
         API_UPSTREAM: http://postgre-backend:5000
+        API_FALLBACK_UPSTREAM: http://tru-so-backend:5000
     container_name: postgre-frontend
     restart: unless-stopped
     ports:

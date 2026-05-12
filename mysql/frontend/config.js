@@ -3,5 +3,5 @@ window.__TECHSTORE_CONFIG__ = {
     companionHref: "http://localhost:3000",
     secondaryLinkHref: "http://localhost:3000",
     portalPickerHref: "http://localhost:3000",
-    loginEndpoint: "/api/auth/login",
+    loginEndpoint: "/api/auth/branches/CN01/login",
 };

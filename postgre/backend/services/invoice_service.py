@@ -9,6 +9,7 @@ from db import (
     parse_pagination,
     query_db,
 )
+from services.branch_replication_service import safe_create_replication_event
 
 
 def _placeholder_sql(sql, engine):
@@ -143,6 +144,11 @@ def _validate_payload(data):
     if missing:
         raise ValueError("Thiếu trường bắt buộc: " + ", ".join(missing))
 
+    ma_hd = str(data.get("ma_hd") or "").strip()
+    if not ma_hd.isdigit() or int(ma_hd) <= 0:
+        raise ValueError("Mã hóa đơn phải là số nguyên dương")
+    data["ma_hd"] = ma_hd
+
     items = data.get("items") or []
     if not isinstance(items, list) or not items:
         raise ValueError("Hóa đơn phải có ít nhất 1 chi tiết (items)")
@@ -235,12 +241,24 @@ def create_invoice(data):
     finally:
         conn.close()
 
-    return get_invoice_detail_for_api(data["ma_hd"])
+    invoice = get_invoice_detail_for_api(data["ma_hd"])
+    if invoice:
+        safe_create_replication_event("invoice", "INVOICE_UPSERT", invoice["ma_hd"], invoice)
+    return invoice
 
 
 def delete_invoice(ma_hd):
+    invoice = get_invoice_detail_for_api(ma_hd)
     affected = execute_db("DELETE FROM HOA_DON WHERE ma_hd = ?", (ma_hd,))
-    return affected > 0
+    if affected > 0:
+        safe_create_replication_event(
+            "invoice",
+            "INVOICE_DELETE",
+            ma_hd,
+            invoice or {"ma_hd": ma_hd},
+        )
+        return True
+    return False
 
 
 def get_revenue_stats():

@@ -2,6 +2,10 @@ from flask import Blueprint, current_app, g, jsonify, request
 
 from middleware.auth import require_auth, require_branch_access, require_role
 from db import query_db
+from services.branch_product_failover_service import (
+    import_product_to_branch_via_central,
+    list_hq_catalog_for_branch_via_central,
+)
 from services.product_service import (
     create_product,
     get_product_by_id_for_api,
@@ -545,6 +549,77 @@ def api_san_pham_by_loai(ma_loai_sp):
     args = request.args.to_dict()
     args["ma_loai_sp"] = ma_loai_sp
     return jsonify(get_products_for_api(args))
+
+
+@product_api_bp.route("/san-pham/from-hq")
+@require_auth
+def api_san_pham_from_hq_for_branch_failover():
+    """Branch-compatible: catalog HQ + cờ already_imported cho chi nhánh hiện tại.
+
+    Phục vụ trường hợp branch backend chết, frontend chi nhánh fallback qua nginx
+    về central API. Token PHẢI là branch scope (đăng nhập chi nhánh qua trụ sở).
+    ---
+    tags:
+      - Sản phẩm chi nhánh (failover)
+    security:
+      - bearerAuth: []
+    responses:
+      200:
+        description: HQ catalog kèm already_imported / pending_import cho chi nhánh
+      403:
+        description: Endpoint này chỉ dành cho token chi nhánh
+    """
+    branch_code = (g.current_user.get("branch_code") or "").upper()
+    if g.current_user.get("scope") != "branch" or not branch_code:
+        return jsonify({"error": "Branch token required"}), 403
+    return jsonify(list_hq_catalog_for_branch_via_central(branch_code))
+
+
+@product_api_bp.route("/san-pham/import-from-hq", methods=["POST"])
+@require_auth
+def api_san_pham_import_from_hq_for_branch_failover():
+    """Branch-compatible: import 1 SP từ catalog HQ vào chi nhánh hiện tại.
+
+    Nếu branch DB còn reachable từ trụ sở, ghi trực tiếp vào SAN_PHAM của chi nhánh.
+    Nếu branch DB không reachable, queue event PRODUCT_IMPORT trong
+    central_failover_events để replay khi backend chi nhánh sống lại.
+    ---
+    tags:
+      - Sản phẩm chi nhánh (failover)
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ma_sp]
+            properties:
+              ma_sp: {type: string}
+    responses:
+      201:
+        description: SP đã nhập vào branch DB hoặc vào queue failover
+      400:
+        description: Payload sai hoặc SP đã tồn tại
+      403:
+        description: Endpoint này chỉ dành cho token chi nhánh
+      404:
+        description: Không tìm thấy SP ở trụ sở
+    """
+    branch_code = (g.current_user.get("branch_code") or "").upper()
+    if g.current_user.get("scope") != "branch" or not branch_code:
+        return jsonify({"error": "Branch token required"}), 403
+
+    data = request.get_json(silent=True) or {}
+    ma_sp = (data.get("ma_sp") or "").strip()
+    try:
+        result = import_product_to_branch_via_central(branch_code, ma_sp)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 404
+    return jsonify(result), 201
 
 
 @product_api_bp.route("/san-pham/ncc/<int:ma_ncc>")

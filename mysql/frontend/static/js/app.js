@@ -780,11 +780,14 @@ function configurePortalUI() {
     secondaryLink.href = activePortal.secondaryLinkHref;
     secondaryLink.textContent = activePortal.secondaryLinkText;
 
+    const isCentral = activePortal.key === "central";
     document.querySelectorAll("[data-central-only]").forEach((element) => {
-        element.hidden = activePortal.key !== "central";
+        element.hidden = !isCentral;
+        element.style.display = isCentral ? "" : "none";
     });
     document.querySelectorAll("[data-branch-only]").forEach((element) => {
-        element.hidden = activePortal.key === "central";
+        element.hidden = isCentral;
+        element.style.display = isCentral ? "none" : "";
     });
 
     productSourcePanel.hidden = activePortal.key !== "central";
@@ -1967,8 +1970,12 @@ invoiceForm.addEventListener("submit", async (event) => {
         if (!invoiceItems.length) {
             throw new Error("Hóa đơn phải có ít nhất 1 dòng.");
         }
+        const invoiceCode = document.getElementById("invoiceFormCode").value.trim();
+        if (!/^\d+$/.test(invoiceCode) || Number(invoiceCode) <= 0) {
+            throw new Error("Mã hóa đơn phải là số nguyên dương.");
+        }
         const payload = {
-            ma_hd: document.getElementById("invoiceFormCode").value.trim(),
+            ma_hd: invoiceCode,
             ma_nhan_vien: document.getElementById("invoiceFormEmployee").value.trim(),
             ten_kh: document.getElementById("invoiceFormCustomerName").value.trim() || null,
             sdt_kh: document.getElementById("invoiceFormCustomerPhone").value.trim() || null,

@@ -10,6 +10,7 @@ from db import (
     query_branch_db,
     query_db,
 )
+from services.branch_replication_service import safe_create_replication_event
 
 
 EMPLOYEE_COLUMNS_SQL = """
@@ -221,10 +222,18 @@ def create_employee_in_branch(ma_chi_nhanh, data):
         password_hash_sql(branch_engine),
         data,
     )
-    return get_employee_by_id_from_branch_database_for_api(
+    employee = get_employee_by_id_from_branch_database_for_api(
         ma_chi_nhanh,
         data["ma_nhan_vien"],
     )
+    if employee:
+        safe_create_replication_event(
+            "employee",
+            "EMPLOYEE_UPSERT",
+            employee["ma_nhan_vien"],
+            employee,
+        )
+    return employee
 
 
 def _build_employee_update_assignments(data, password_hash):
@@ -282,7 +291,15 @@ def update_employee_in_branch(ma_chi_nhanh, ma_nhan_vien, data):
     if affected_rows == 0:
         return None
 
-    return get_employee_by_id_from_branch_database_for_api(ma_chi_nhanh, ma_nhan_vien)
+    employee = get_employee_by_id_from_branch_database_for_api(ma_chi_nhanh, ma_nhan_vien)
+    if employee:
+        safe_create_replication_event(
+            "employee",
+            "EMPLOYEE_UPSERT",
+            employee["ma_nhan_vien"],
+            employee,
+        )
+    return employee
 
 
 def soft_delete_employee(ma_nhan_vien):
@@ -308,7 +325,16 @@ def soft_delete_employee_in_branch(ma_chi_nhanh, ma_nhan_vien):
         """.format(now=now_sql(branch_engine)),
         (ma_nhan_vien,),
     )
-    return affected_rows > 0
+    if affected_rows > 0:
+        employee = get_employee_by_id_from_branch_database_for_api(ma_chi_nhanh, ma_nhan_vien)
+        safe_create_replication_event(
+            "employee",
+            "EMPLOYEE_DELETE",
+            ma_nhan_vien,
+            employee or {"ma_nhan_vien": ma_nhan_vien, "ma_chi_nhanh": ma_chi_nhanh},
+        )
+        return True
+    return False
 
 
 def get_employees_by_branch_for_api(ma_chi_nhanh):
