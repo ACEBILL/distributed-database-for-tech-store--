@@ -6,7 +6,7 @@ from services.product_service import (
     get_product_by_id_for_api,
     get_products_from_branch_database_for_api,
     import_product_from_hq,
-    list_hq_products_not_on_branch,
+    list_hq_catalog_for_branch,
     soft_delete_product,
     update_product,
 )
@@ -179,7 +179,10 @@ def api_internal_product_sync_log():
 @product_api_bp.route("/san-pham/from-hq")
 @require_role("admin", "giam_doc", "truong_phong")
 def api_san_pham_available_from_hq():
-    """Danh sách SP có ở trụ sở nhưng chưa có ở chi nhánh này (UI picker)
+    """Catalog SP đầy đủ của trụ sở, mỗi dòng kèm cờ `already_imported` cho chi nhánh này.
+
+    UI bên chi nhánh hiển thị toàn bộ catalog, nút "Nhập" cho SP chưa nhập,
+    badge "Đã có" cho SP đã có trên chi nhánh.
     ---
     tags:
       - Sản phẩm chi nhánh
@@ -187,12 +190,12 @@ def api_san_pham_available_from_hq():
       - bearerAuth: []
     responses:
       200:
-        description: Danh sách SP chưa nhập từ trụ sở
+        description: Toàn bộ catalog HQ kèm cờ đã nhập
       502:
         description: Không gọi được API trụ sở
     """
     try:
-        return jsonify({"data": list_hq_products_not_on_branch()})
+        return jsonify({"data": list_hq_catalog_for_branch()})
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 502
 

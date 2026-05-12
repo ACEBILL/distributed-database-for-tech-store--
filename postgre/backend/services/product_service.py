@@ -212,11 +212,11 @@ def update_product(ma_sp, data):
     return get_product_by_id_for_api(ma_sp)
 
 
-def list_hq_products_not_on_branch():
-    """Liệt kê SP có ở trụ sở nhưng CHƯA có ở chi nhánh hiện tại.
+def list_hq_catalog_for_branch():
+    """Trả về TOÀN BỘ catalog SP của trụ sở, mỗi dòng kèm flag `already_imported`.
 
-    Dùng cho UI "Thêm SP từ catalog trụ sở" — chỉ hiện những mã chi nhánh
-    chưa kéo về.
+    Phản ánh đúng quan hệ 1-N (1 SP HQ có thể được nhập về nhiều chi nhánh).
+    UI bên branch sẽ hiện nút "Nhập" cho dòng chưa có, badge "Đã có" cho dòng đã có.
     """
     payload = _hq_get("/api/internal/products/list?only_active=1")
     hq_products = payload.get("data") or []
@@ -225,8 +225,9 @@ def list_hq_products_not_on_branch():
         row["ma_sp"]
         for row in query_db("SELECT ma_sp FROM SAN_PHAM")
     }
-    available = [p for p in hq_products if p.get("ma_sp") not in local_codes]
-    return available
+    for product in hq_products:
+        product["already_imported"] = product.get("ma_sp") in local_codes
+    return hq_products
 
 
 def import_product_from_hq(ma_sp):
@@ -312,12 +313,12 @@ def get_products_from_branch_database_for_api(ma_chi_nhanh):
     if not branch:
         return None
 
+    # Hiển thị TOÀN BỘ SP đang active trên DB chi nhánh (đã replicate từ HQ).
+    # Không filter theo loai_sp.ma_chi_nhanh — mỗi chi nhánh phục vụ đủ catalog.
     products = query_branch_db(
         ma_chi_nhanh,
         """
         SELECT
-            cn.ma_chi_nhanh,
-            cn.ten_chi_nhanh,
             sp.ma_sp,
             sp.ten_sp,
             sp.gia,
@@ -329,13 +330,15 @@ def get_products_from_branch_database_for_api(ma_chi_nhanh):
             ncc.ten_NCC
         FROM SAN_PHAM sp
         JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
-        JOIN chi_nhanh cn ON lsp.ma_chi_nhanh = cn.ma_chi_nhanh
         JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
-        WHERE cn.ma_chi_nhanh = ?
+        WHERE sp.trang_thai = 1
         ORDER BY sp.ma_sp
         """,
-        (ma_chi_nhanh,),
     )
+    # Gắn ma_chi_nhanh + ten_chi_nhanh vào từng dòng để frontend hiển thị thống nhất
+    for product in products:
+        product["ma_chi_nhanh"] = branch["ma_chi_nhanh"]
+        product["ten_chi_nhanh"] = branch["ten_chi_nhanh"]
     for product in products:
         format_product(product)
 

@@ -1,4 +1,9 @@
 import json
+import os
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from flask import current_app
 
 from db import (
     build_pagination_meta,
@@ -14,6 +19,30 @@ from services.cache_service import delete_cache, get_cache, set_cache
 from services.product_sync_service import create_product_sync_event
 
 
+def _hq_api_url():
+    return os.getenv("HQ_API_URL", "http://tru-so-backend:5000").rstrip("/")
+
+
+def _service_token():
+    return current_app.config.get("SERVICE_TOKEN", "")
+
+
+def _hq_get(path):
+    req = Request(
+        f"{_hq_api_url()}{path}",
+        headers={"X-Service-Token": _service_token()},
+        method="GET",
+    )
+    try:
+        with urlopen(req, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HQ {exc.code}: {body}") from exc
+    except (OSError, URLError, TimeoutError) as exc:
+        raise RuntimeError(f"HQ unreachable: {exc}") from exc
+
+
 PRODUCT_CACHE_KEY = "cache:san_pham_list"
 
 
@@ -21,7 +50,7 @@ PRODUCT_BASE_SQL = """
     FROM SAN_PHAM sp
     JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
     JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
-"""
+""" #1
 
 
 def _build_product_filters(args):
@@ -103,7 +132,7 @@ def format_product(product):
 def get_product_by_id_for_api(ma_sp):
     product = query_db(
         """
-        SELECT sp.*, lsp.ten_loai_sp, lsp.ma_chi_nhanh, ncc.ten_NCC
+        SELECT sp.*, lsp.ten_loai_sp, ncc.ten_NCC
         FROM SAN_PHAM sp
         JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
         JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
@@ -114,7 +143,7 @@ def get_product_by_id_for_api(ma_sp):
     )
     return format_product(product)
 
-#test
+
 def create_product(data):
     required_fields = ["ma_sp", "ten_sp", "gia", "ma_loai_sp", "ma_ncc"]
     missing_fields = [field for field in required_fields if not data.get(field)]
@@ -188,6 +217,66 @@ def update_product(ma_sp, data):
     return product
 
 
+def list_hq_catalog_for_branch():
+    """Trả về TOÀN BỘ catalog SP của trụ sở, mỗi dòng kèm flag `already_imported`.
+
+    Phản ánh đúng quan hệ 1-N (1 SP HQ có thể được nhập về nhiều chi nhánh).
+    UI bên branch sẽ hiện nút "Nhập" cho dòng chưa có, badge "Đã có" cho dòng đã có.
+    """
+    payload = _hq_get("/api/internal/products/list?only_active=1")
+    hq_products = payload.get("data") or []
+
+    local_codes = {
+        row["ma_sp"]
+        for row in query_db("SELECT ma_sp FROM SAN_PHAM")
+    }
+    for product in hq_products:
+        product["already_imported"] = product.get("ma_sp") in local_codes
+    return hq_products
+
+
+def import_product_from_hq(ma_sp):
+    """Kéo 1 SP từ trụ sở về chi nhánh hiện tại.
+
+    Không phát outbox event — trụ sở đã có bản gốc, không cần đẩy ngược.
+    Lỗi nếu chi nhánh đã có ma_sp (caller nên kiểm tra trước).
+    """
+    if not ma_sp:
+        raise ValueError("ma_sp là bắt buộc")
+
+    existing = query_db("SELECT ma_sp FROM SAN_PHAM WHERE ma_sp = ?", (ma_sp,), fetchone=True)
+    if existing:
+        raise ValueError(f"Sản phẩm {ma_sp} đã tồn tại ở chi nhánh này")
+
+    payload = _hq_get(f"/api/internal/products/{ma_sp}")
+    if not payload.get("success") or not payload.get("data"):
+        raise ValueError(f"Không tìm thấy {ma_sp} ở trụ sở")
+    src = payload["data"]
+
+    execute_db(
+        """
+        INSERT INTO SAN_PHAM (
+            ma_sp, ten_sp, gia, ti_le_loi_nhuan, ti_le_giam_gia,
+            mo_ta, ma_loai_sp, ma_ncc, trang_thai
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            src["ma_sp"],
+            src["ten_sp"],
+            src.get("gia") or 0,
+            src.get("ti_le_loi_nhuan") or 0,
+            src.get("ti_le_giam_gia") or 0,
+            src.get("mo_ta"),
+            src["ma_loai_sp"],
+            src["ma_ncc"],
+            src.get("trang_thai", 1),
+        ),
+    )
+    delete_cache(PRODUCT_CACHE_KEY)
+    return get_product_by_id_for_api(ma_sp)
+
+
 def soft_delete_product(ma_sp):
     affected_rows = execute_db(
         """
@@ -231,12 +320,12 @@ def get_products_from_branch_database_for_api(ma_chi_nhanh):
     if not branch:
         return None
 
+    # Hiển thị TOÀN BỘ SP đang active trên DB chi nhánh (đã replicate từ HQ).
+    # Không filter theo loai_sp.ma_chi_nhanh — mỗi chi nhánh phục vụ đủ catalog.
     products = query_branch_db(
         ma_chi_nhanh,
         """
         SELECT
-            cn.ma_chi_nhanh,
-            cn.ten_chi_nhanh,
             sp.ma_sp,
             sp.ten_sp,
             sp.gia,
@@ -248,13 +337,15 @@ def get_products_from_branch_database_for_api(ma_chi_nhanh):
             ncc.ten_NCC
         FROM SAN_PHAM sp
         JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
-        JOIN chi_nhanh cn ON lsp.ma_chi_nhanh = cn.ma_chi_nhanh
         JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
-        WHERE cn.ma_chi_nhanh = ?
+        WHERE sp.trang_thai = 1
         ORDER BY sp.ma_sp
         """,
-        (ma_chi_nhanh,),
     )
+    # Gắn ma_chi_nhanh + ten_chi_nhanh vào từng dòng để frontend hiển thị thống nhất
+    for product in products:
+        product["ma_chi_nhanh"] = branch["ma_chi_nhanh"]
+        product["ten_chi_nhanh"] = branch["ten_chi_nhanh"]
     for product in products:
         format_product(product)
 

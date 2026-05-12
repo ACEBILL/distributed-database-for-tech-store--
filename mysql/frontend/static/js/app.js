@@ -79,6 +79,10 @@ const pageTitles = {
 const SUPPORTED_BRANCH_CODES = ["CN01", "CN02"];
 let selectedBranchSourceCode = "CN01";
 const EMPLOYEE_PAGE_LIMIT = 10;
+const PRODUCT_PAGE_SIZE = 10;
+let productCurrentPage = 1;
+let productListCache = [];
+let productPayloadCache = null;
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -730,8 +734,27 @@ function canManageProducts() {
     );
 }
 
+function renderProductPaginationBar() {
+    const totalPages = Math.max(1, Math.ceil(productListCache.length / PRODUCT_PAGE_SIZE));
+    if (productCurrentPage > totalPages) productCurrentPage = totalPages;
+    if (productCurrentPage < 1) productCurrentPage = 1;
+
+    const pageInfo = document.getElementById("productPageInfo");
+    const prevBtn = document.getElementById("productPrevBtn");
+    const nextBtn = document.getElementById("productNextBtn");
+    if (pageInfo) {
+        pageInfo.textContent = productListCache.length
+            ? `Trang ${productCurrentPage} / ${totalPages} — ${numberFormatter.format(productListCache.length)} sản phẩm`
+            : "Không có sản phẩm";
+    }
+    if (prevBtn) prevBtn.disabled = productCurrentPage <= 1;
+    if (nextBtn) nextBtn.disabled = productCurrentPage >= totalPages;
+}
+
 function renderProducts(payload) {
     const products = payload.data || [];
+    productListCache = products;
+    productPayloadCache = payload;
     const sourceLabel = getProductSourceLabel(payload);
     const total = payload.pagination ? payload.pagination.total : products.length;
     const canManage = canManageProducts();
@@ -753,10 +776,16 @@ function renderProducts(payload) {
 
     if (!products.length) {
         renderEmpty("productRows", colCount, "Chưa có dữ liệu sản phẩm.");
+        renderProductPaginationBar();
         return;
     }
 
-    document.getElementById("productRows").innerHTML = products
+    const totalPages = Math.max(1, Math.ceil(products.length / PRODUCT_PAGE_SIZE));
+    if (productCurrentPage > totalPages) productCurrentPage = totalPages;
+    const start = (productCurrentPage - 1) * PRODUCT_PAGE_SIZE;
+    const pageProducts = products.slice(start, start + PRODUCT_PAGE_SIZE);
+
+    document.getElementById("productRows").innerHTML = pageProducts
         .map((product) => {
             const actionCell = canManage
                 ? `<td class="right">
@@ -783,6 +812,7 @@ function renderProducts(payload) {
             `;
         })
         .join("");
+    renderProductPaginationBar();
 }
 
 async function fetchProductsForActivePortal() {
@@ -1233,10 +1263,25 @@ productSourceButtons.forEach((button) => {
         }
 
         selectedProductSource = button.dataset.productSource;
+        productCurrentPage = 1;
         syncProductSourceButtons();
         switchView("productsView");
         await loadData();
     });
+});
+
+document.getElementById("productPrevBtn")?.addEventListener("click", () => {
+    if (productCurrentPage > 1) {
+        productCurrentPage -= 1;
+        renderProducts(productPayloadCache || { data: productListCache });
+    }
+});
+document.getElementById("productNextBtn")?.addEventListener("click", () => {
+    const totalPages = Math.max(1, Math.ceil(productListCache.length / PRODUCT_PAGE_SIZE));
+    if (productCurrentPage < totalPages) {
+        productCurrentPage += 1;
+        renderProducts(productPayloadCache || { data: productListCache });
+    }
 });
 
 employeeSourceButtons.forEach((button) => {
@@ -2002,6 +2047,13 @@ const productImportSection = document.getElementById("productImportSection");
 const productImportRows = document.getElementById("productImportRows");
 const productImportStatus = document.getElementById("productImportStatus");
 const productImportRefreshBtn = document.getElementById("productImportRefreshBtn");
+const productImportShowAll = document.getElementById("productImportShowAll");
+const productImportPageInfo = document.getElementById("productImportPageInfo");
+const productImportPrevBtn = document.getElementById("productImportPrevBtn");
+const productImportNextBtn = document.getElementById("productImportNextBtn");
+let productImportCatalogCache = [];
+let productImportPage = 1;
+const PRODUCT_IMPORT_PAGE_SIZE = 10;
 
 function canImportFromHQ() {
     if (!currentUser || !activePortal) return false;
@@ -2012,39 +2064,76 @@ function canImportFromHQ() {
     );
 }
 
-async function loadProductImportCatalog() {
-    if (!productImportSection || !canImportFromHQ()) return;
-    productImportSection.classList.remove("hidden");
-    productImportStatus.textContent = "Đang tải catalog từ trụ sở...";
-    try {
-        const payload = await fetchJson("/api/san-pham/from-hq");
-        const products = payload?.data || [];
-        if (!products.length) {
-            productImportRows.innerHTML = `<tr><td class="empty" colspan="6">Chi nhánh đã có đủ SP từ trụ sở.</td></tr>`;
-            productImportStatus.textContent = `Đã đồng bộ — không có SP nào cần nhập.`;
-            return;
-        }
-        productImportRows.innerHTML = products
-            .map(
-                (p) => `
+function renderProductImportCatalog() {
+    const showAll = productImportShowAll && productImportShowAll.checked;
+    const filtered = showAll
+        ? productImportCatalogCache
+        : productImportCatalogCache.filter((p) => !p.already_imported);
+
+    const totalHq = productImportCatalogCache.length;
+    const totalAvailable = productImportCatalogCache.filter((p) => !p.already_imported).length;
+    const totalImported = totalHq - totalAvailable;
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PRODUCT_IMPORT_PAGE_SIZE));
+    if (productImportPage > totalPages) productImportPage = totalPages;
+    if (productImportPage < 1) productImportPage = 1;
+    const start = (productImportPage - 1) * PRODUCT_IMPORT_PAGE_SIZE;
+    const pageRows = filtered.slice(start, start + PRODUCT_IMPORT_PAGE_SIZE);
+
+    if (!filtered.length) {
+        const msg = showAll
+            ? "Trụ sở chưa có sản phẩm nào."
+            : "Chi nhánh đã nhập đủ catalog của trụ sở.";
+        productImportRows.innerHTML = `<tr><td class="empty" colspan="7">${msg}</td></tr>`;
+    } else {
+        productImportRows.innerHTML = pageRows
+            .map((p) => {
+                const status = p.already_imported
+                    ? badge("Đã có ở chi nhánh", "ok")
+                    : badge("Chưa nhập", "warn");
+                const action = p.already_imported
+                    ? `<button class="table-btn" type="button" disabled>Đã có</button>`
+                    : `<button class="table-btn" type="button"
+                            data-import-action="add"
+                            data-import-id="${escapeHtml(p.ma_sp)}">Nhập</button>`;
+                return `
                     <tr>
                         <td>${escapeHtml(p.ma_sp)}</td>
                         <td>${escapeHtml(p.ten_sp)}</td>
                         <td>${escapeHtml(p.ten_loai_sp || p.ma_loai_sp || "")}</td>
                         <td>${escapeHtml(p.ten_NCC || p.ten_ncc || ("NCC " + (p.ma_ncc || "")))}</td>
                         <td class="right">${currencyFormatter.format(p.gia || 0)}</td>
-                        <td class="right">
-                            <button class="table-btn" type="button"
-                                data-import-action="add"
-                                data-import-id="${escapeHtml(p.ma_sp)}">Nhập</button>
-                        </td>
+                        <td>${status}</td>
+                        <td class="right">${action}</td>
                     </tr>
-                `
-            )
+                `;
+            })
             .join("");
-        productImportStatus.textContent = `${products.length} SP có thể nhập về.`;
+    }
+    if (productImportPageInfo) {
+        productImportPageInfo.textContent = filtered.length
+            ? `Trang ${productImportPage} / ${totalPages} — ${filtered.length} SP`
+            : "Không có dữ liệu";
+    }
+    if (productImportPrevBtn) productImportPrevBtn.disabled = productImportPage <= 1;
+    if (productImportNextBtn) productImportNextBtn.disabled = productImportPage >= totalPages;
+
+    productImportStatus.textContent =
+        `Catalog trụ sở: ${totalHq} SP · ${totalImported} đã có ở chi nhánh · ${totalAvailable} có thể nhập.`;
+}
+
+async function loadProductImportCatalog() {
+    if (!productImportSection || !canImportFromHQ()) return;
+    productImportSection.classList.remove("hidden");
+    productImportStatus.textContent = "Đang tải catalog từ trụ sở...";
+    try {
+        const payload = await fetchJson("/api/san-pham/from-hq");
+        productImportCatalogCache = payload?.data || [];
+        productImportPage = 1;
+        renderProductImportCatalog();
     } catch (error) {
-        productImportRows.innerHTML = `<tr><td class="empty" colspan="6">Không tải được catalog trụ sở.</td></tr>`;
+        productImportCatalogCache = [];
+        productImportRows.innerHTML = `<tr><td class="empty" colspan="7">Không tải được catalog trụ sở.</td></tr>`;
         productImportStatus.textContent = error.message || "Không tải được catalog.";
     }
 }
@@ -2078,6 +2167,20 @@ function toggleProductImportVisibility() {
 
 if (productImportRows) productImportRows.addEventListener("click", handleImportClick);
 if (productImportRefreshBtn) productImportRefreshBtn.addEventListener("click", loadProductImportCatalog);
+if (productImportShowAll) productImportShowAll.addEventListener("change", () => {
+    productImportPage = 1;
+    renderProductImportCatalog();
+});
+if (productImportPrevBtn) productImportPrevBtn.addEventListener("click", () => {
+    if (productImportPage > 1) {
+        productImportPage -= 1;
+        renderProductImportCatalog();
+    }
+});
+if (productImportNextBtn) productImportNextBtn.addEventListener("click", () => {
+    productImportPage += 1;
+    renderProductImportCatalog();
+});
 
 const _originalConfigurePortalUI_Import = configurePortalUI;
 configurePortalUI = function () {

@@ -344,14 +344,14 @@ def _update_branch_event_status(event_id, status, message=None):
 def _branch_event_payload(event_id, event_type, product, version):
     branch = _branch_code()
     return {
-        "event_id":      event_id,
-        "event_type":    event_type,
-        "source":        branch,
+        "event_id":     event_id,
+        "event_type":   event_type,
+        "source":       branch,
         "source_branch": branch,
         "target_branch": "TRU_SO",
-        "version":       version,
-        "occurred_at":   datetime.now(timezone.utc).isoformat(),
-        "data":          dict(product),
+        "version":      version,
+        "occurred_at":  datetime.now(timezone.utc).isoformat(),
+        "data":         dict(product),
     }
 
 

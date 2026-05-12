@@ -279,12 +279,16 @@
                         <div class="section-header">
                             <h1>Thêm sản phẩm từ trụ sở</h1>
                             <div class="topbar-actions">
+                                <label style="display:flex; align-items:center; gap:6px; font-size:13px;">
+                                    <input id="productImportShowAll" type="checkbox">
+                                    <span>Hiện cả SP đã có</span>
+                                </label>
                                 <button id="productImportRefreshBtn" class="btn" type="button">Tải lại catalog</button>
                             </div>
                         </div>
-                        <p class="muted" style="margin-top: -8px;">
-                            Hiển thị các SP có ở trụ sở nhưng chưa có ở chi nhánh. Bấm "Nhập" để kéo về chi nhánh hiện tại
-                            (không phát event ngược lại trụ sở).
+                        <p style="margin-top:-8px; color:#556170; font-size:13px;">
+                            Quan hệ <strong>1–N</strong>: một SP của trụ sở có thể được nhập về nhiều chi nhánh.
+                            Bấm "Nhập" để kéo về chi nhánh hiện tại (không phát event ngược lại trụ sở).
                         </p>
                         <div class="table-wrap">
                             <table>
@@ -295,13 +299,21 @@
                                         <th>Loại</th>
                                         <th>Nhà cung cấp</th>
                                         <th class="right">Giá HQ</th>
+                                        <th>Trạng thái</th>
                                         <th class="right">Thao tác</th>
                                     </tr>
                                 </thead>
                                 <tbody id="productImportRows"></tbody>
                             </table>
                         </div>
-                        <div id="productImportStatus" class="form-error compact-error" role="alert"></div>
+                        <div id="productImportPagination" class="pagination-bar">
+                            <span id="productImportPageInfo" class="pagination-info">Trang 1 / 1</span>
+                            <div class="pagination-actions">
+                                <button id="productImportPrevBtn" class="btn" type="button">Trang trước</button>
+                                <button id="productImportNextBtn" class="btn" type="button">Trang sau</button>
+                            </div>
+                        </div>
+                        <div id="productImportStatus" role="status" style="margin-top:8px; color:#556170; font-size:13px;"></div>
                     </section>
 
                     <section id="productManageSection" class="section hidden" data-central-only>
@@ -382,6 +394,13 @@
                                 </thead>
                                 <tbody id="productRows"></tbody>
                             </table>
+                        </div>
+                        <div id="productPagination" class="pagination-bar">
+                            <span id="productPageInfo" class="pagination-info">Trang 1 / 1</span>
+                            <div class="pagination-actions">
+                                <button id="productPrevBtn" class="btn" type="button">Trang trước</button>
+                                <button id="productNextBtn" class="btn" type="button">Trang sau</button>
+                            </div>
                         </div>
                     </section>
                 </section>
