@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS HOA_DON (
     ma_hd VARCHAR(20) PRIMARY KEY,
     ngay_lap TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ma_nhan_vien VARCHAR(20) NOT NULL REFERENCES NHAN_VIEN(ma_nhan_vien),
+    ten_nhan_vien VARCHAR(100) NULL,
     ten_kh VARCHAR(100) NULL,
     sdt_kh VARCHAR(15) NULL,
     tong_tien NUMERIC(15, 2) NOT NULL DEFAULT 0,
@@ -203,10 +204,10 @@ ON CONFLICT (ma_nhan_vien) DO NOTHING;
 UPDATE phong_ban SET ma_nv = 2 WHERE ma_pb = 2;
 UPDATE phong_ban SET ma_nv = 3 WHERE ma_pb = 3;
 
-INSERT INTO HOA_DON (ma_hd, ngay_lap, ma_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) VALUES
-('HD101', '2026-04-15 11:00:00', 'NV004', 'Phạm Văn D', '0922000111',  8000000, NULL),
-('HD102', '2026-04-25 16:20:00', 'NV005', 'Hoàng Thị E', '0922000222', 13500000, 'Combo'),
-('HD103', '2026-05-04 09:45:00', 'NV004', 'Ngô Văn F',   '0922000333', 26000000, NULL)
+INSERT INTO HOA_DON (ma_hd, ngay_lap, ma_nhan_vien, ten_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) VALUES
+('HD101', '2026-04-15 11:00:00', 'NV004', 'Phạm Thị Hương', 'Phạm Văn D',  '0922000111',  8000000, NULL),
+('HD102', '2026-04-25 16:20:00', 'NV005', 'Hoàng Đức Anh',  'Hoàng Thị E', '0922000222', 13500000, 'Combo'),
+('HD103', '2026-05-04 09:45:00', 'NV004', 'Phạm Thị Hương', 'Ngô Văn F',   '0922000333', 26000000, NULL)
 ON CONFLICT (ma_hd) DO NOTHING;
 
 INSERT INTO CT_HOA_DON (ma_hd, ma_sp, so_luong, don_gia, thanh_tien) VALUES

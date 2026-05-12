@@ -29,7 +29,8 @@ EMPLOYEE_SQL = """
 """
 
 INVOICE_SQL = """
-    SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien, nv.ho_ten AS ten_nhan_vien,
+    SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien,
+           COALESCE(hd.ten_nhan_vien, nv.ho_ten) AS ten_nhan_vien,
            hd.ten_kh, hd.sdt_kh, hd.tong_tien, hd.ghi_chu
     FROM HOA_DON hd
     LEFT JOIN NHAN_VIEN nv ON hd.ma_nhan_vien = nv.ma_nhan_vien

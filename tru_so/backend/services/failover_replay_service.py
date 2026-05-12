@@ -133,13 +133,14 @@ def _replay_invoice_upsert(branch_code, payload):
             branch_code,
             """
             UPDATE HOA_DON
-            SET ngay_lap = ?, ma_nhan_vien = ?, ten_kh = ?, sdt_kh = ?,
+            SET ngay_lap = ?, ma_nhan_vien = ?, ten_nhan_vien = ?, ten_kh = ?, sdt_kh = ?,
                 tong_tien = ?, ghi_chu = ?
             WHERE ma_hd = ?
             """,
             (
                 data.get("ngay_lap"),
                 data.get("ma_nhan_vien"),
+                data.get("ten_nhan_vien"),
                 data.get("ten_kh"),
                 data.get("sdt_kh"),
                 data.get("tong_tien") or 0,
@@ -153,14 +154,15 @@ def _replay_invoice_upsert(branch_code, payload):
             branch_code,
             """
             INSERT INTO HOA_DON (
-                ma_hd, ngay_lap, ma_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu
+                ma_hd, ngay_lap, ma_nhan_vien, ten_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 ma_hd,
                 data.get("ngay_lap"),
                 data.get("ma_nhan_vien"),
+                data.get("ten_nhan_vien"),
                 data.get("ten_kh"),
                 data.get("sdt_kh"),
                 data.get("tong_tien") or 0,

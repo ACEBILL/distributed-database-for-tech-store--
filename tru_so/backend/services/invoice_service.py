@@ -78,7 +78,8 @@ def get_invoices_from_branch(ma_chi_nhanh, args=None):
         rows = query_branch_db(
             ma_chi_nhanh,
             f"""
-            SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien, nv.ho_ten AS ten_nhan_vien,
+            SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien,
+                   COALESCE(hd.ten_nhan_vien, nv.ho_ten) AS ten_nhan_vien,
                    hd.ten_kh, hd.sdt_kh, hd.tong_tien, hd.ghi_chu
             FROM HOA_DON hd
             LEFT JOIN NHAN_VIEN nv ON hd.ma_nhan_vien = nv.ma_nhan_vien
@@ -113,7 +114,8 @@ def get_invoice_detail_from_branch(ma_chi_nhanh, ma_hd):
         invoice = query_branch_db(
             ma_chi_nhanh,
             """
-            SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien, nv.ho_ten AS ten_nhan_vien,
+            SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien,
+                   COALESCE(hd.ten_nhan_vien, nv.ho_ten) AS ten_nhan_vien,
                    hd.ten_kh, hd.sdt_kh, hd.tong_tien, hd.ghi_chu
             FROM HOA_DON hd
             LEFT JOIN NHAN_VIEN nv ON hd.ma_nhan_vien = nv.ma_nhan_vien
@@ -204,12 +206,13 @@ def _create_invoice_in_branch_db(ma_chi_nhanh, data, items):
 
     employee = query_branch_db(
         ma_chi_nhanh,
-        "SELECT ma_nhan_vien FROM NHAN_VIEN WHERE ma_nhan_vien = ?",
+        "SELECT ma_nhan_vien, ho_ten FROM NHAN_VIEN WHERE ma_nhan_vien = ?",
         (data["ma_nhan_vien"],),
         fetchone=True,
     )
     if not employee:
         raise ValueError(f"Nhân viên {data['ma_nhan_vien']} không tồn tại ở chi nhánh {ma_chi_nhanh}")
+    data["ten_nhan_vien"] = data.get("ten_nhan_vien") or employee["ho_ten"]
 
     existing = query_branch_db(
         ma_chi_nhanh,
@@ -238,13 +241,14 @@ def _create_invoice_in_branch_db(ma_chi_nhanh, data, items):
         cursor = conn.cursor()
         cursor.execute(
             _placeholder_sql(
-                "INSERT INTO HOA_DON (ma_hd, ma_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO HOA_DON (ma_hd, ma_nhan_vien, ten_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 engine,
             ),
             (
                 data["ma_hd"],
                 data["ma_nhan_vien"],
+                data.get("ten_nhan_vien"),
                 data.get("ten_kh"),
                 data.get("sdt_kh"),
                 tong_tien,

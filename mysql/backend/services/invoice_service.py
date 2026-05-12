@@ -86,7 +86,8 @@ def get_invoices_for_api(args=None):
     page_clause, page_params = pagination_clause("hd.ngay_lap DESC, hd.ma_hd", offset, limit)
     rows = query_db(
         f"""
-        SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien, nv.ho_ten AS ten_nhan_vien,
+        SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien,
+               COALESCE(hd.ten_nhan_vien, nv.ho_ten) AS ten_nhan_vien,
                hd.ten_kh, hd.sdt_kh, hd.tong_tien, hd.ghi_chu
         FROM HOA_DON hd
         LEFT JOIN NHAN_VIEN nv ON hd.ma_nhan_vien = nv.ma_nhan_vien
@@ -107,7 +108,8 @@ def get_invoices_for_api(args=None):
 def get_invoice_detail_for_api(ma_hd):
     invoice = query_db(
         """
-        SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien, nv.ho_ten AS ten_nhan_vien,
+        SELECT hd.ma_hd, hd.ngay_lap, hd.ma_nhan_vien,
+               COALESCE(hd.ten_nhan_vien, nv.ho_ten) AS ten_nhan_vien,
                hd.ten_kh, hd.sdt_kh, hd.tong_tien, hd.ghi_chu
         FROM HOA_DON hd
         LEFT JOIN NHAN_VIEN nv ON hd.ma_nhan_vien = nv.ma_nhan_vien
@@ -181,7 +183,7 @@ def create_invoice(data):
     tong_tien = round(sum(item["thanh_tien"] for item in items), 2)
 
     employee = query_db(
-        "SELECT ma_nhan_vien FROM NHAN_VIEN WHERE ma_nhan_vien = ?",
+        "SELECT ma_nhan_vien, ho_ten FROM NHAN_VIEN WHERE ma_nhan_vien = ?",
         (data["ma_nhan_vien"],),
         fetchone=True,
     )
@@ -210,13 +212,14 @@ def create_invoice(data):
 
         cursor.execute(
             _placeholder_sql(
-                "INSERT INTO HOA_DON (ma_hd, ma_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO HOA_DON (ma_hd, ma_nhan_vien, ten_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 engine,
             ),
             (
                 data["ma_hd"],
                 data["ma_nhan_vien"],
+                employee["ho_ten"],
                 data.get("ten_kh"),
                 data.get("sdt_kh"),
                 tong_tien,

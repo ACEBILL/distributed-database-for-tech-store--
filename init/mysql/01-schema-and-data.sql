@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS HOA_DON (
     ma_hd VARCHAR(20) PRIMARY KEY,
     ngay_lap DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ma_nhan_vien VARCHAR(20) NOT NULL,
+    ten_nhan_vien VARCHAR(100) NULL,
     ten_kh VARCHAR(100) NULL,
     sdt_kh VARCHAR(15) NULL,
     tong_tien DECIMAL(15, 2) NOT NULL DEFAULT 0,
@@ -189,10 +190,10 @@ INSERT IGNORE INTO NHAN_VIEN (
 UPDATE phong_ban SET ma_nv = 2 WHERE ma_pb = 2;
 UPDATE phong_ban SET ma_nv = 3 WHERE ma_pb = 3;
 
-INSERT IGNORE INTO HOA_DON (ma_hd, ngay_lap, ma_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) VALUES
-('HD001', '2026-04-12 09:15:00', 'NV004', 'Nguyễn Văn A', '0911000111', 32000000, 'Mua trả góp'),
-('HD002', '2026-04-22 14:40:00', 'NV004', 'Trần Thị B',   '0911000222', 28000000, NULL),
-('HD003', '2026-05-03 10:05:00', 'NV005', 'Lê Văn C',     '0911000333', 31200000, 'Khách quen');
+INSERT IGNORE INTO HOA_DON (ma_hd, ngay_lap, ma_nhan_vien, ten_nhan_vien, ten_kh, sdt_kh, tong_tien, ghi_chu) VALUES
+('HD001', '2026-04-12 09:15:00', 'NV004', 'Phạm Thị Hương', 'Nguyễn Văn A', '0911000111', 32000000, 'Mua trả góp'),
+('HD002', '2026-04-22 14:40:00', 'NV004', 'Phạm Thị Hương', 'Trần Thị B',   '0911000222', 28000000, NULL),
+('HD003', '2026-05-03 10:05:00', 'NV005', 'Hoàng Đức Anh',  'Lê Văn C',     '0911000333', 31200000, 'Khách quen');
 
 INSERT IGNORE INTO CT_HOA_DON (ma_hd, ma_sp, so_luong, don_gia, thanh_tien) VALUES
 ('HD001', 'SP001', 1, 32000000, 32000000),
