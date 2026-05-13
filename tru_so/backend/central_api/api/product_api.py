@@ -5,6 +5,7 @@ from db import query_db
 from services.branch_product_failover_service import (
     import_product_to_branch_via_central,
     list_hq_catalog_for_branch_via_central,
+    remove_product_from_branch_via_central,
 )
 from services.product_service import (
     create_product,
@@ -620,6 +621,23 @@ def api_san_pham_import_from_hq_for_branch_failover():
     except LookupError as exc:
         return jsonify({"error": str(exc)}), 404
     return jsonify(result), 201
+
+
+@product_api_bp.route("/san-pham/import-from-hq/<ma_sp>", methods=["DELETE"])
+@require_auth
+def api_san_pham_remove_imported_from_hq_for_branch_failover(ma_sp):
+    """Branch-compatible: bo 1 SP khoi catalog cua chi nhanh hien tai."""
+    branch_code = (g.current_user.get("branch_code") or "").upper()
+    if g.current_user.get("scope") != "branch" or not branch_code:
+        return jsonify({"error": "Branch token required"}), 403
+
+    try:
+        result = remove_product_from_branch_via_central(branch_code, ma_sp)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 404
+    return jsonify(result)
 
 
 @product_api_bp.route("/san-pham/ncc/<int:ma_ncc>")

@@ -45,7 +45,7 @@ def _hq_catalog():
 def _branch_existing_ma_sp(branch_code):
     """Tra ve set ma_sp da co o branch. Tra ve None neu branch DB khong reachable."""
     try:
-        rows = query_branch_db(branch_code, "SELECT ma_sp FROM SAN_PHAM")
+        rows = query_branch_db(branch_code, "SELECT ma_sp FROM SAN_PHAM WHERE trang_thai = 1")
     except Exception:
         return None
     return {row["ma_sp"] for row in rows}
@@ -142,6 +142,37 @@ def _record_product_import_failover_event(branch_code, product):
     return payload
 
 
+def _record_product_remove_failover_event(branch_code, ma_sp):
+    ensure_branch_replica_tables()
+    branch = branch_code.upper()
+    payload = {
+        "event_id": f"hq_failover_{branch}_product_remove_{ma_sp}_{_event_suffix()}",
+        "entity_type": "product",
+        "event_type": "PRODUCT_REMOVE",
+        "object_id": ma_sp,
+        "source_branch": branch,
+        "version": 0,
+        "data": {"ma_sp": ma_sp},
+    }
+    execute_db(
+        """
+        INSERT INTO central_failover_events (
+            event_id, target_branch, entity_type, object_id, event_type, payload, status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 'pending')
+        """,
+        (
+            payload["event_id"],
+            branch,
+            "product",
+            ma_sp,
+            "PRODUCT_REMOVE",
+            json.dumps(payload, ensure_ascii=False),
+        ),
+    )
+    return payload
+
+
 def import_product_to_branch_via_central(branch_code, ma_sp):
     """Co gang ghi truc tiep san pham vao branch DB. Failover neu khong duoc."""
     if not ma_sp:
@@ -175,6 +206,39 @@ def import_product_to_branch_via_central(branch_code, ma_sp):
     if ma_sp in existing:
         raise ValueError(f"Sản phẩm {ma_sp} đã tồn tại ở chi nhánh {branch}")
 
+    inactive_existing = query_branch_db(
+        branch,
+        "SELECT ma_sp FROM SAN_PHAM WHERE ma_sp = ?",
+        (ma_sp,),
+        fetchone=True,
+    )
+    if inactive_existing:
+        execute_branch_db(
+            branch,
+            """
+            UPDATE SAN_PHAM
+            SET ten_sp = ?, gia = ?, ti_le_loi_nhuan = ?, ti_le_giam_gia = ?,
+                mo_ta = ?, ma_loai_sp = ?, ma_ncc = ?, trang_thai = 1
+            WHERE ma_sp = ?
+            """,
+            (
+                product["ten_sp"],
+                product.get("gia") or 0,
+                product.get("ti_le_loi_nhuan") or 0,
+                product.get("ti_le_giam_gia") or 0,
+                product.get("mo_ta"),
+                product["ma_loai_sp"],
+                product["ma_ncc"],
+                ma_sp,
+            ),
+        )
+        return {
+            "ma_sp": ma_sp,
+            "branch_code": branch,
+            "source": "branch_database",
+            "product": product,
+        }
+
     execute_branch_db(
         branch,
         """
@@ -201,4 +265,36 @@ def import_product_to_branch_via_central(branch_code, ma_sp):
         "branch_code": branch,
         "source": "branch_database",
         "product": product,
+    }
+
+
+def remove_product_from_branch_via_central(branch_code, ma_sp):
+    """Remove a product from one branch catalog while the branch frontend uses HQ fallback."""
+    if not ma_sp:
+        raise ValueError("ma_sp is required")
+
+    branch = branch_code.upper()
+    existing = _branch_existing_ma_sp(branch)
+    if existing is None:
+        _record_product_remove_failover_event(branch, ma_sp)
+        return {
+            "ma_sp": ma_sp,
+            "branch_code": branch,
+            "source": "hq_failover",
+            "message": "Branch DB khong truy cap duoc - da ghi vao hang doi failover",
+        }
+
+    affected = execute_branch_db(
+        branch,
+        "UPDATE SAN_PHAM SET trang_thai = 0 WHERE ma_sp = ?",
+        (ma_sp,),
+    )
+    if not affected:
+        raise LookupError(f"Product {ma_sp} not found in branch {branch}")
+
+    return {
+        "ma_sp": ma_sp,
+        "branch_code": branch,
+        "source": "branch_database",
+        "message": "Product removed from branch",
     }

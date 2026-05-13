@@ -964,6 +964,15 @@ function canManageProducts() {
     );
 }
 
+function canRemoveBranchProducts() {
+    if (!currentUser || !activePortal) return false;
+    if (activePortal.key === "central") return false;
+    return (
+        currentUser.scope === "branch" &&
+        ["admin", "giam_doc", "truong_phong"].includes(currentUser.chuc_vu)
+    );
+}
+
 function renderProductPaginationBar() {
     const totalPages = Math.max(1, Math.ceil(productListCache.length / PRODUCT_PAGE_SIZE));
     if (productCurrentPage > totalPages) productCurrentPage = totalPages;
@@ -988,7 +997,9 @@ function renderProducts(payload) {
     const sourceLabel = getProductSourceLabel(payload);
     const total = payload.pagination ? payload.pagination.total : products.length;
     const canManage = canManageProducts();
-    const colCount = canManage ? 7 : 6;
+    const canRemoveFromBranch = canRemoveBranchProducts();
+    const hasActions = canManage || canRemoveFromBranch;
+    const colCount = hasActions ? 8 : 7;
 
     overviewChartState.products = total;
     renderOverviewOpsChart();
@@ -1004,7 +1015,7 @@ function renderProducts(payload) {
     }
 
     const actionHead = document.getElementById("productActionHead");
-    if (actionHead) actionHead.classList.toggle("hidden", !canManage);
+    if (actionHead) actionHead.classList.toggle("hidden", !hasActions);
 
     if (!products.length) {
         renderEmpty("productRows", colCount, "Chưa có dữ liệu sản phẩm.");
@@ -1027,10 +1038,18 @@ function renderProducts(payload) {
                             <button class="table-btn table-btn-danger" type="button"
                                 data-product-action="disable"
                                 data-product-id="${escapeHtml(product.ma_sp)}"
-                                ${Number(product.trang_thai) === 1 ? "" : "disabled"}>Ngưng</button>
+                                ${Number(product.trang_thai ?? 1) === 1 ? "" : "disabled"}>Ngưng</button>
                         </div>
                    </td>`
+                : canRemoveFromBranch
+                    ? `<td class="right">
+                            <button class="table-btn table-btn-danger" type="button"
+                                data-product-action="remove-branch"
+                                data-product-id="${escapeHtml(product.ma_sp)}"
+                                ${Number(product.trang_thai ?? 1) === 1 ? "" : "disabled"}>${Number(product.trang_thai ?? 1) === 1 ? "Bỏ khỏi CN" : "Đã ngưng"}</button>
+                       </td>`
                 : "";
+            const isActive = Number(product.trang_thai ?? 1) === 1;
             return `
                 <tr>
                     <td>${escapeHtml(product.ma_sp)}</td>
@@ -1039,6 +1058,7 @@ function renderProducts(payload) {
                     <td>${escapeHtml(product.ten_NCC)}</td>
                     <td class="right">${currencyFormatter.format(product.gia || 0)}</td>
                     <td class="right">${escapeHtml(product.ti_le_giam_gia || 0)}%</td>
+                    <td>${badge(isActive ? "Đang bán" : "Ngưng bán", isActive ? "ok" : "muted")}</td>
                     ${actionCell}
                 </tr>
             `;
@@ -1259,7 +1279,7 @@ function renderApiError(message) {
         renderEmpty("branchRows", 4, message);
     }
 
-    renderEmpty("productRows", 6, message);
+    renderEmpty("productRows", canManageProducts() || canRemoveBranchProducts() ? 8 : 7, message);
     renderEmpty("employeeRows", getEmployeeColumnCount(), message);
 }
 
@@ -1795,10 +1815,33 @@ function renderInvoiceItemRow(index, item) {
     `;
 }
 
+function getActiveInvoiceProducts() {
+    const sps = Array.isArray(productListCache) ? productListCache : [];
+    return sps.filter((sp) => Number(sp.trang_thai ?? 1) === 1);
+}
+
+function findActiveInvoiceProduct(ma_sp) {
+    return getActiveInvoiceProducts().find((sp) => (sp.ma_sp || "") === ma_sp);
+}
+
+function assertInvoiceProductsCanBeSold() {
+    const sps = Array.isArray(productListCache) ? productListCache : [];
+    invoiceItems.forEach((item, index) => {
+        const code = String(item.ma_sp || "").trim();
+        const sp = sps.find((p) => (p.ma_sp || "") === code);
+        if (!sp) {
+            throw new Error(`Dòng ${index + 1}: sản phẩm ${code || "(trống)"} không tồn tại trong chi nhánh.`);
+        }
+        if (Number(sp.trang_thai ?? 1) !== 1) {
+            throw new Error(`Sản phẩm ${code} đã ngưng bán, không thể lập hóa đơn.`);
+        }
+    });
+}
+
 function renderInvoiceSpDatalist() {
     const datalist = document.getElementById("invoiceSpList");
     if (!datalist) return;
-    const sps = Array.isArray(productListCache) ? productListCache : [];
+    const sps = getActiveInvoiceProducts();
     if (!sps.length) {
         datalist.innerHTML = "";
         return;
@@ -1915,8 +1958,7 @@ invoiceItemRows.addEventListener("input", (event) => {
         const value = target.value.trim();
         invoiceItems[idx].ma_sp = value;
         // Khi mã SP khớp đúng → auto-fill đơn giá + tỉ lệ giảm giá
-        const sps = Array.isArray(productListCache) ? productListCache : [];
-        const sp = sps.find((p) => (p.ma_sp || "") === value);
+        const sp = findActiveInvoiceProduct(value);
         if (sp) {
             const gia = Number(sp.gia_ban_thuc_te || sp.gia || 0);
             const giamGia = Number(sp.ti_le_giam_gia || 0);
@@ -1975,6 +2017,7 @@ invoiceForm.addEventListener("submit", async (event) => {
         if (!/^\d+$/.test(invoiceCode) || Number(invoiceCode) <= 0) {
             throw new Error("Mã hóa đơn phải là số nguyên dương.");
         }
+        assertInvoiceProductsCanBeSold();
         const payload = {
             ma_hd: invoiceCode,
             ma_nhan_vien: document.getElementById("invoiceFormEmployee").value.trim(),
@@ -2309,12 +2352,13 @@ async function submitProductForm(event) {
 
 async function handleProductRowClick(event) {
     const button = event.target.closest("[data-product-action]");
-    if (!button || !canManageProducts()) return;
+    if (!button) return;
     const ma_sp = button.dataset.productId;
     const action = button.dataset.productAction;
     if (!ma_sp) return;
 
     if (action === "edit") {
+        if (!canManageProducts()) return;
         try {
             const product = await fetchJson(`/api/san-pham/${encodeURIComponent(ma_sp)}`);
             await loadProductFormDropdowns();
@@ -2326,6 +2370,7 @@ async function handleProductRowClick(event) {
     }
 
     if (action === "disable") {
+        if (!canManageProducts()) return;
         if (!window.confirm(`Ngưng bán sản phẩm ${ma_sp}? Thay đổi sẽ đẩy xuống cả CN01 và CN02.`)) return;
         try {
             await fetchJson(`/api/san-pham/${encodeURIComponent(ma_sp)}`, { method: "DELETE" });
@@ -2334,6 +2379,20 @@ async function handleProductRowClick(event) {
             await loadData();
         } catch (error) {
             productFormError.textContent = error.message || "Không ngưng được sản phẩm.";
+        }
+    }
+
+    if (action === "remove-branch") {
+        if (!canRemoveBranchProducts()) return;
+        if (!window.confirm(`Bỏ sản phẩm ${ma_sp} khỏi chi nhánh ${activePortal.branchCode}?`)) return;
+        button.disabled = true;
+        try {
+            await fetchJson(`/api/san-pham/import-from-hq/${encodeURIComponent(ma_sp)}`, { method: "DELETE" });
+            await Promise.all([loadData(), loadProductImportCatalog()]);
+            setText("productSource", `Đã bỏ ${ma_sp} khỏi chi nhánh ${activePortal.branchCode}`);
+        } catch (error) {
+            button.disabled = false;
+            setText("productSource", error.message || "Không bỏ được sản phẩm khỏi chi nhánh.");
         }
     }
 }

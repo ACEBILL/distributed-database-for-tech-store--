@@ -197,13 +197,17 @@ def create_invoice(data):
     ma_sps = [item["ma_sp"] for item in items]
     placeholders = ", ".join(["?"] * len(ma_sps))
     found = query_db(
-        f"SELECT ma_sp FROM SAN_PHAM WHERE ma_sp IN ({placeholders})",
+        f"SELECT ma_sp, trang_thai FROM SAN_PHAM WHERE ma_sp IN ({placeholders})",
         tuple(ma_sps),
     )
     found_codes = {row["ma_sp"] for row in found}
     missing_codes = [code for code in ma_sps if code not in found_codes]
     if missing_codes:
         raise ValueError("Sản phẩm không tồn tại: " + ", ".join(missing_codes))
+
+    inactive_codes = [row["ma_sp"] for row in found if int(row.get("trang_thai") or 0) != 1]
+    if inactive_codes:
+        raise ValueError("Sản phẩm đã ngưng bán, không thể lập hóa đơn: " + ", ".join(inactive_codes))
 
     engine = get_db_engine()
     conn = get_db_connection()

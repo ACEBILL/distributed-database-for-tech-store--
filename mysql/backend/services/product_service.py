@@ -42,7 +42,7 @@ def _hq_get(path):
         raise RuntimeError(f"HQ unreachable: {exc}") from exc
 
 
-PRODUCT_CACHE_KEY = "cache:san_pham_list"
+PRODUCT_CACHE_KEY = "cache:san_pham_list:v2"
 
 
 PRODUCT_BASE_SQL = """
@@ -79,9 +79,6 @@ def _build_product_filters(args):
             params.append(int(trang_thai))
         except (TypeError, ValueError):
             raise ValueError("trang_thai phải là số nguyên")
-    else:
-        where.append("sp.trang_thai = 1")
-
     gia_min = args.get("gia_min")
     if gia_min not in (None, ""):
         try:
@@ -106,10 +103,11 @@ def get_active_products():
     return query_db(
         """
         SELECT sp.ma_sp, sp.ten_sp, sp.gia, sp.ti_le_giam_gia,
+               sp.trang_thai,
                lsp.ten_loai_sp, ncc.ten_NCC
         """
         + PRODUCT_BASE_SQL
-        + " WHERE sp.trang_thai = 1"
+        + " ORDER BY sp.ma_sp"
     )
 
 
@@ -223,7 +221,7 @@ def list_hq_catalog_for_branch():
 
     local_codes = {
         row["ma_sp"]
-        for row in query_db("SELECT ma_sp FROM SAN_PHAM")
+        for row in query_db("SELECT ma_sp FROM SAN_PHAM WHERE trang_thai = 1")
     }
     for product in hq_products:
         product["already_imported"] = product.get("ma_sp") in local_codes
@@ -239,14 +237,37 @@ def import_product_from_hq(ma_sp):
     if not ma_sp:
         raise ValueError("ma_sp là bắt buộc")
 
-    existing = query_db("SELECT ma_sp FROM SAN_PHAM WHERE ma_sp = ?", (ma_sp,), fetchone=True)
-    if existing:
+    existing = query_db("SELECT ma_sp, trang_thai FROM SAN_PHAM WHERE ma_sp = ?", (ma_sp,), fetchone=True)
+    if existing and int(existing.get("trang_thai") or 0):
         raise ValueError(f"Sản phẩm {ma_sp} đã tồn tại ở chi nhánh này")
 
     payload = _hq_get(f"/api/internal/products/{ma_sp}")
     if not payload.get("success") or not payload.get("data"):
         raise ValueError(f"Không tìm thấy {ma_sp} ở trụ sở")
     src = payload["data"]
+
+    if existing:
+        execute_db(
+            """
+            UPDATE SAN_PHAM
+            SET ten_sp = ?, gia = ?, ti_le_loi_nhuan = ?, ti_le_giam_gia = ?,
+                mo_ta = ?, ma_loai_sp = ?, ma_ncc = ?, trang_thai = 1,
+                cap_nhat_vao = {now}
+            WHERE ma_sp = ?
+            """.format(now=now_sql()),
+            (
+                src["ten_sp"],
+                src.get("gia") or 0,
+                src.get("ti_le_loi_nhuan") or 0,
+                src.get("ti_le_giam_gia") or 0,
+                src.get("mo_ta"),
+                src["ma_loai_sp"],
+                src["ma_ncc"],
+                ma_sp,
+            ),
+        )
+        delete_cache(PRODUCT_CACHE_KEY)
+        return get_product_by_id_for_api(ma_sp)
 
     execute_db(
         """
@@ -270,6 +291,24 @@ def import_product_from_hq(ma_sp):
     )
     delete_cache(PRODUCT_CACHE_KEY)
     return get_product_by_id_for_api(ma_sp)
+
+
+def remove_imported_product_from_hq(ma_sp):
+    """Remove a product from this branch catalog without syncing to HQ."""
+    if not ma_sp:
+        raise ValueError("ma_sp is required")
+
+    affected_rows = execute_db(
+        """
+        UPDATE SAN_PHAM
+        SET trang_thai = 0, cap_nhat_vao = {now}
+        WHERE ma_sp = ?
+        """.format(now=now_sql()),
+        (ma_sp,),
+    )
+    if affected_rows:
+        delete_cache(PRODUCT_CACHE_KEY)
+    return affected_rows > 0
 
 
 def soft_delete_product(ma_sp):
@@ -331,7 +370,6 @@ def get_products_from_branch_database_for_api(ma_chi_nhanh):
         FROM SAN_PHAM sp
         JOIN loai_sp lsp ON sp.ma_loai_sp = lsp.ma_loai_sp
         JOIN NCC ncc ON sp.ma_ncc = ncc.ma_NCC
-        WHERE sp.trang_thai = 1
         ORDER BY sp.ma_sp
         """,
     )

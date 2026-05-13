@@ -7,6 +7,7 @@ from services.product_service import (
     get_products_from_branch_database_for_api,
     import_product_from_hq,
     list_hq_catalog_for_branch,
+    remove_imported_product_from_hq,
     soft_delete_product,
     update_product,
 )
@@ -241,6 +242,22 @@ def api_san_pham_import_from_hq():
         status = 404 if msg.startswith("HQ 404") else 502
         return jsonify({"error": msg}), status
     return jsonify(product), 201
+
+
+@product_api_bp.route("/san-pham/import-from-hq/<ma_sp>", methods=["DELETE"])
+@require_role("admin", "giam_doc", "truong_phong")
+def api_san_pham_remove_imported_from_hq(ma_sp):
+    """Bo 1 SP da nhap tu catalog tru so khoi chi nhanh hien tai.
+
+    Khong phat outbox event len tru so; san pham chi bi ngung ban tai chi nhanh nay.
+    """
+    try:
+        removed = remove_imported_product_from_hq(ma_sp)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not removed:
+        return jsonify({"error": "Product not found"}), 404
+    return jsonify({"message": "Product removed from branch", "ma_sp": ma_sp})
 
 
 @product_api_bp.route("/san-pham", methods=["POST"])

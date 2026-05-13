@@ -203,11 +203,32 @@ def _replay_product_import(branch_code, payload):
 
     existing = query_branch_db(
         branch_code,
-        "SELECT ma_sp FROM SAN_PHAM WHERE ma_sp = ?",
+        "SELECT ma_sp, trang_thai FROM SAN_PHAM WHERE ma_sp = ?",
         (ma_sp,),
         fetchone=True,
     )
     if existing:
+        if int(existing.get("trang_thai") or 0):
+            return
+        execute_branch_db(
+            branch_code,
+            """
+            UPDATE SAN_PHAM
+            SET ten_sp = ?, gia = ?, ti_le_loi_nhuan = ?, ti_le_giam_gia = ?,
+                mo_ta = ?, ma_loai_sp = ?, ma_ncc = ?, trang_thai = 1
+            WHERE ma_sp = ?
+            """,
+            (
+                data["ten_sp"],
+                data.get("gia") or 0,
+                data.get("ti_le_loi_nhuan") or 0,
+                data.get("ti_le_giam_gia") or 0,
+                data.get("mo_ta"),
+                data["ma_loai_sp"],
+                data["ma_ncc"],
+                ma_sp,
+            ),
+        )
         return
 
     execute_branch_db(
@@ -233,6 +254,17 @@ def _replay_product_import(branch_code, payload):
     )
 
 
+def _replay_product_remove(branch_code, payload):
+    ma_sp = (payload.get("data") or {}).get("ma_sp") or payload.get("object_id")
+    if not ma_sp:
+        raise ValueError("Missing ma_sp in failover event")
+    execute_branch_db(
+        branch_code,
+        "UPDATE SAN_PHAM SET trang_thai = 0 WHERE ma_sp = ?",
+        (ma_sp,),
+    )
+
+
 def _replay_one_event(branch_code, event):
     payload = _decode_payload(event["payload"])
     entity = str(event["entity_type"]).lower()
@@ -248,6 +280,8 @@ def _replay_one_event(branch_code, event):
     elif entity == "product":
         if event_type == "PRODUCT_IMPORT":
             _replay_product_import(branch_code, payload)
+        elif event_type == "PRODUCT_REMOVE":
+            _replay_product_remove(branch_code, payload)
         else:
             raise ValueError(f"Unsupported product event type: {event_type}")
     else:
